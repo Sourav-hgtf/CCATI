@@ -139,15 +139,59 @@ export interface ScoringJobTriggerRequest {
   force_ingestion?: boolean;
 }
 
+export interface SegmentQualityMetrics {
+  silhouette_score: number;
+  davies_bouldin_index: number;
+  calinski_harabasz_index: number;
+  n_clusters: number;
+  evaluated_subscribers: number;
+  interpretation: string;
+}
+
+export interface SegmentRiskMatrixRow {
+  cluster_id: number;
+  cluster_name: string;
+  low_risk_count: number;
+  medium_risk_count: number;
+  high_risk_count: number;
+  critical_risk_count: number;
+  total_count: number;
+  high_critical_ratio: number;
+}
+
+export interface SegmentMacroInsights {
+  highest_risk_segment: string;
+  highest_risk_churn_prob: number;
+  largest_segment: string;
+  largest_segment_size: number;
+  highest_churn_volume_segment: string;
+  highest_churn_volume_count: number;
+  lowest_risk_segment: string;
+  lowest_risk_churn_prob: number;
+}
+
+export interface SegmentROI {
+  eligible_customers: number;
+  avg_clv: number;
+  estimated_campaign_cost: number;
+  estimated_retention_opportunity: number;
+  estimated_roi_pct: number;
+}
+
 export interface SegmentDetailResponse {
   profile: SegmentProfile;
   feature_distributions: Record<string, any>;
   total_customers: number;
+  roi_projection?: SegmentROI;
+  risk_breakdown: Record<string, number>;
 }
 
 export interface SegmentOverviewResponse {
-  segments: any[];
-  scatter_points: any[];
+  segments: SegmentProfile[];
+  scatter_points: ScatterPoint[];
+  quality_metrics?: SegmentQualityMetrics;
+  risk_matrix: SegmentRiskMatrixRow[];
+  macro_insights?: SegmentMacroInsights;
 }
 
 export interface SegmentProfile {
@@ -157,12 +201,58 @@ export interface SegmentProfile {
   percentage: number;
   avg_tenure_months: number;
   avg_monthly_charges: number;
+  avg_total_charges: number;
   avg_usage_drop_call_pct: number;
   avg_usage_drop_data_pct: number;
   avg_support_calls_m1: number;
   avg_churn_probability: number;
+  actual_churn_rate: number;
+  avg_clv: number;
+  avg_priority_score: number;
+  high_risk_count: number;
+  critical_risk_count: number;
+  health_score: number;
+  health_status: 'HEALTHY' | 'MODERATE_RISK' | 'CRITICAL_RISK';
   recommended_strategy: string;
   risk_category: string;
+  eligible_customers: number;
+  estimated_campaign_cost: number;
+  estimated_retention_opportunity: number;
+  estimated_roi_pct: number;
+}
+
+export interface SegmentCustomerItem {
+  customer_id: string;
+  name: string;
+  plan_tier: string;
+  contract_type: string;
+  tenure_months: number;
+  monthly_charges: number;
+  churn_probability: number;
+  risk_tier: string;
+  priority_score: number;
+  clv: number;
+  support_calls_m1: number;
+  usage_drop_call_pct: number;
+  cluster_id: number;
+}
+
+export interface SegmentCustomerListResponse {
+  cluster_id: number;
+  cluster_name: string;
+  total_customers: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  customers: SegmentCustomerItem[];
+}
+
+export interface SegmentSummaryResponse {
+  total_segments: number;
+  total_subscribers: number;
+  macro_insights: SegmentMacroInsights;
+  quality_metrics: SegmentQualityMetrics;
+  segments_summary: SegmentProfile[];
 }
 
 export interface TokenResponse {
@@ -187,3 +277,4 @@ export interface ValidationError {
   input?: any;
   ctx?: Record<string, any>;
 }
+

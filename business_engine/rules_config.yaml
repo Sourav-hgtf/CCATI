@@ -91,6 +91,22 @@ data_quality:
     - "Auto-Debit"
     - "UPI/Credit Card"
 
+segmentation:
+  k_clusters: 4
+  features:
+    - "tenure_months"
+    - "monthly_charges"
+    - "usage_drop_call_pct"
+    - "usage_drop_data_pct"
+    - "support_calls_m1"
+  health_thresholds:
+    healthy_min: 70.0
+    moderate_min: 40.0
+  roi_assumptions:
+    campaign_cost_per_sub: 75.0
+    expected_save_rate: 0.35
+
+
 
 
 

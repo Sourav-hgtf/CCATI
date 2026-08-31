@@ -13,7 +13,14 @@ from backend.app.core.config import settings
 from business_engine.recommendations import get_recommended_action
 from business_engine.risk_scoring import calculate_risk_scores
 from ml_engine.config import PROCESSED_DATA_DIR
-from ml_engine.pipelines.clustering import compute_2d_projections, compute_cluster_profiles, prepare_and_scale_features, run_kmeans_clustering
+from ml_engine.pipelines.clustering import (
+    compute_2d_projections,
+    compute_cluster_profiles,
+    compute_clustering_quality_metrics,
+    prepare_and_scale_features,
+    run_kmeans_clustering,
+    save_segmentation_artifacts,
+)
 from ml_engine.pipelines.explainability import compute_shap_explanations
 from ml_engine.pipelines.ingestion import run_batch_ingestion
 from ml_engine.pipelines.training import train_churn_classification_pipeline
@@ -54,31 +61,40 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
     print("Computing SHAP feature attributions...")
     shap_results = compute_shap_explanations(model, X_score, top_n=5)
 
-    # Step 5: K-Means Segmentation & PCA 2D Scatter Coordinates
-    print("Running K-Means customer segmentation (threshold: Churn Prob >= 0.5)...")
-    X_scaled, _, df_target = prepare_and_scale_features(df, min_risk_threshold=0.5)
-    cluster_labels, _, _ = run_kmeans_clustering(X_scaled, k=4)
-    cluster_profiles = compute_cluster_profiles(df_target, cluster_labels)
-    coords_2d = compute_2d_projections(X_scaled)
-
-    # Assign cluster IDs and PCA coordinates to at-risk target population
-    df["cluster_id"] = 0
-    df["pca_x"] = 0.0
-    df["pca_y"] = 0.0
-
-    target_indices = df_target.index
-    df.loc[target_indices, "cluster_id"] = cluster_labels
-    df.loc[target_indices, "pca_x"] = coords_2d[:, 0].round(4)
-    df.loc[target_indices, "pca_y"] = coords_2d[:, 1].round(4)
-
-    # Step 6: Business Risk Scoring & Recommendations
-    print("Computing Business Risk Scores and Retention Recommendations...")
+    # Step 5: Business Risk Scoring (Computed before profiling so profiles include CLV & Priority Scores)
+    print("Computing Business Risk Scores...")
     risk_scores = calculate_risk_scores(
         churn_probabilities=churn_probs,
         monthly_charges=df["monthly_charges"].values,
         tenures=df["tenure_months"].values,
     )
+    df["risk_tier"] = [r["risk_tier"] for r in risk_scores]
+    df["priority_score"] = [r["priority_score"] for r in risk_scores]
+    df["clv"] = [r["clv"] for r in risk_scores]
 
+    # Step 6: K-Means Segmentation & PCA 2D Scatter Coordinates
+    print("Running K-Means customer segmentation across full subscriber base...")
+    X_scaled, scaler, _ = prepare_and_scale_features(df)
+    cluster_labels, sil_score, kmeans = run_kmeans_clustering(X_scaled, k=4)
+    coords_2d, pca = compute_2d_projections(X_scaled)
+    quality_metrics = compute_clustering_quality_metrics(X_scaled, cluster_labels)
+    cluster_profiles = compute_cluster_profiles(df, cluster_labels)
+
+    # Save segmentation artifacts to disk for fast deterministic single-customer assignments
+    save_segmentation_artifacts(
+        kmeans=kmeans,
+        scaler=scaler,
+        pca=pca,
+        quality_metrics=quality_metrics,
+        profiles=cluster_profiles,
+    )
+
+    df["cluster_id"] = cluster_labels
+    df["pca_x"] = coords_2d[:, 0].round(4)
+    df["pca_y"] = coords_2d[:, 1].round(4)
+
+    # Step 7: Retention Recommendations & Record Hydration
+    print("Computing Retention Recommendations...")
     scored_records = []
     for i, row in df.iterrows():
         r_score = risk_scores[i]
@@ -120,12 +136,11 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
         }
         scored_records.append(record)
 
-    # Step 7: Persist Scored Records to Database
+    # Step 8: Persist Scored Records & Profiles to Database
     df_scored = pd.DataFrame(scored_records)
     conn = sqlite3.connect(settings.DB_PATH)
     df_scored.to_sql("customer_scores", conn, if_exists="replace", index=False)
 
-    # Save cluster profiles to database
     df_profiles = pd.DataFrame(cluster_profiles)
     df_profiles.to_sql("segment_profiles", conn, if_exists="replace", index=False)
     conn.close()
@@ -137,5 +152,7 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
         "status": "SUCCEEDED",
         "records_processed": len(df_scored),
         "model_version": model_info["version"],
+        "clustering_metrics": quality_metrics,
         "execution_seconds": round(execution_sec, 2),
     }
+
