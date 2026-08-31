@@ -49,7 +49,7 @@ export interface MonitoringAlert {
   severity: string;
   title: string;
   message: string;
-  affected_features: string[];
+  affected_features?: string[];
   timestamp: string;
 }
 
@@ -78,6 +78,80 @@ export interface MonitoringHistoryItem {
   features_drifted: number;
 }
 
+export interface PerformanceMetrics {
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  roc_auc: number;
+  pr_auc: number;
+  confusion_matrix: {
+    tn: number;
+    fp: number;
+    fn: number;
+    tp: number;
+  };
+}
+
+export interface PerformanceMonitoringResponse {
+  performance_id: string;
+  status: 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNAVAILABLE';
+  model_name: string;
+  model_version: string;
+  threshold: number;
+  timestamp: string;
+  ground_truth_available: boolean;
+  sample_count: number;
+  metrics: PerformanceMetrics | null;
+  baseline: {
+    precision: number;
+    recall: number;
+    f1: number;
+    roc_auc: number;
+    pr_auc: number;
+  };
+  deltas?: {
+    precision_delta: number;
+    recall_delta: number;
+    f1_delta: number;
+    roc_auc_delta: number;
+    pr_auc_delta: number;
+  };
+  confusion_matrix?: {
+    tn: number;
+    fp: number;
+    fn: number;
+    tp: number;
+  };
+  churn_rate_analysis?: {
+    actual_churn_rate_pct: number;
+    predicted_churn_rate_pct: number;
+    churn_rate_diff_pct: number;
+  };
+  probability_distribution?: {
+    min: number;
+    max: number;
+    mean: number;
+    median: number;
+    std: number;
+  };
+  alerts: MonitoringAlert[];
+  recommended_action: string;
+}
+
+export interface PerformanceHistoryItem {
+  performance_id: string;
+  timestamp: string;
+  model_name: string;
+  model_version: string;
+  status: string;
+  precision: number;
+  recall: number;
+  f1: number;
+  roc_auc: number;
+  pr_auc: number;
+}
+
 export const getModelMetrics = async (): Promise<ModelMetricsResponse> => {
   return fetchApi<ModelMetricsResponse>(`/models/metrics`);
 };
@@ -96,6 +170,20 @@ export const getMonitoringHistory = async (): Promise<MonitoringHistoryItem[]> =
 
 export const runMonitoringScan = async (): Promise<{ status: string; run: DriftStatusResponse }> => {
   return fetchApi<{ status: string; run: DriftStatusResponse }>(`/monitoring/run`, {
+    method: 'POST',
+  });
+};
+
+export const getPerformanceMonitoring = async (): Promise<PerformanceMonitoringResponse> => {
+  return fetchApi<PerformanceMonitoringResponse>(`/monitoring/performance`);
+};
+
+export const getPerformanceHistory = async (): Promise<PerformanceHistoryItem[]> => {
+  return fetchApi<PerformanceHistoryItem[]>(`/monitoring/performance/history`);
+};
+
+export const runPerformanceScan = async (): Promise<{ status: string; run: PerformanceMonitoringResponse }> => {
+  return fetchApi<{ status: string; run: PerformanceMonitoringResponse }>(`/monitoring/performance/run`, {
     method: 'POST',
   });
 };

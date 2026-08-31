@@ -44,3 +44,13 @@ drift:
   psi_medium: 0.25   # 0.10 <= PSI < 0.25 -> WARNING
   psi_high: 0.25     # PSI >= 0.25 -> CRITICAL
 
+performance_degradation:
+  precision_baseline: 0.8392
+  recall_baseline: 1.0000
+  f1_baseline: 0.9125
+  roc_auc_baseline: 0.9432
+  pr_auc_baseline: 0.8719
+  warning_drop_pct: 0.05    # > 5% drop in F1/ROC-AUC -> WARNING
+  critical_drop_pct: 0.15   # > 15% drop in F1/ROC-AUC -> CRITICAL
+
+

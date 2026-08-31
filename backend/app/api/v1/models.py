@@ -1,4 +1,4 @@
-"""Model Monitoring, Data Drift, and Registry Information Endpoints (TICKET-505, TASK 3, TASK 8)."""
+"""Model Monitoring, Data Drift, Model Performance, and Registry Information Endpoints (TICKET-505, TASK 3, TASK 8, TASK 9)."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from backend.app.core.audit import log_audit_event
@@ -10,6 +10,7 @@ from backend.app.schemas.model_metrics import (
     ModelMetricsResponse,
 )
 from ml_engine.monitoring.drift_detector import DriftDetector
+from ml_engine.monitoring.performance_evaluator import PerformanceEvaluator
 from ml_engine.registry.model_registry import ModelRegistry
 
 router = APIRouter()
@@ -89,11 +90,49 @@ def trigger_monitoring_run(
     return {"status": "SUCCESS", "run": result}
 
 
+@router.get("/monitoring/performance")
+def get_performance_monitoring(
+    threshold: float = 0.50,
+    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+):
+    """TASK 9: GET /api/v1/monitoring/performance - Production classification quality evaluation."""
+    evaluator = PerformanceEvaluator()
+    return evaluator.evaluate_production_performance(threshold=threshold)
+
+
+@router.get("/monitoring/performance/history")
+def get_performance_history(
+    limit: int = 10,
+    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+):
+    """TASK 9: GET /api/v1/monitoring/performance/history - Historical performance run logs."""
+    evaluator = PerformanceEvaluator()
+    return evaluator.get_performance_history(limit=limit)
+
+
+@router.post("/monitoring/performance/run")
+def trigger_performance_run(
+    threshold: float = 0.50,
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst"])),
+):
+    """TASK 9: POST /api/v1/monitoring/performance/run - Execute model performance evaluation scan."""
+    evaluator = PerformanceEvaluator()
+    result = evaluator.evaluate_production_performance(threshold=threshold)
+    log_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="PERFORMANCE_EVALUATION",
+        target_resource=f"model:{result.get('model_version', 'v1788203728')}",
+        details=f"Executed performance evaluation: Status {result['status']}",
+    )
+    return {"status": "SUCCESS", "run": result}
+
+
 @router.get("/models/metrics", response_model=ModelMetricsResponse)
 def get_model_metrics(
     current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
 ):
-    """TICKET-505 / TASK 8: GET /api/v1/models/metrics (performance history & dynamic drift indicators)."""
+    """TICKET-505 / TASK 8 / TASK 9: GET /api/v1/models/metrics (performance history & dynamic drift indicators)."""
     registry = ModelRegistry()
     all_models = registry.list_models()
 
