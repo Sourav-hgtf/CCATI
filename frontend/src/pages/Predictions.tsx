@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { predictCustomerChurn, ChurnPredictionResult } from '../api/predictions';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { Search, BrainCircuit, Sparkles, CheckCircle2, TrendingUp, TrendingDown, ArrowRight, RefreshCw, AlertTriangle } from 'lucide-react';
@@ -11,12 +11,15 @@ export const Predictions: React.FC = () => {
   const [activeSearchId, setActiveSearchId] = useState('CUST-10000');
   const [result, setResult] = useState<ChurnPredictionResult | null>(null);
 
+  const queryClient = useQueryClient();
+
   const mutation = useMutation({
     mutationFn: (id: string) => predictCustomerChurn(id),
     onSuccess: (data, variables) => {
       // Defensive Validation: Only set result if returned payload customer_id matches active request ID
       if (data && data.customer_id.toLowerCase() === variables.toLowerCase()) {
         setResult(data);
+        queryClient.invalidateQueries({ queryKey: ['prediction-history'] });
       }
     },
     onError: () => {
