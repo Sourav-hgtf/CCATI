@@ -20,8 +20,23 @@ class Settings(BaseSettings):
 
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent.parent
     DATA_DIR: Path = BASE_DIR / "data"
+    
+    # Database Settings
+    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/telecom_churn"
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
+    
+    # Fallback to local SQLite only when explicitly requested
+    USE_SQLITE_FALLBACK: bool = False
     DB_PATH: Path = DATA_DIR / "database" / "telecom_churn.db"
-    DATABASE_URL: str = f"sqlite:///{DB_PATH}"
+    
+    @property
+    def get_database_url(self) -> str:
+        if self.USE_SQLITE_FALLBACK:
+            return f"sqlite:///{self.DB_PATH}"
+        return self.DATABASE_URL
 
     # ── Observability (TASK 12) ──────────────────────────────────────────────
     # LOG_LEVEL: Python logging level name (DEBUG, INFO, WARNING, ERROR, CRITICAL)

@@ -1,0 +1,347 @@
+import { fetchApi } from './client';
+import { ModelMetricsResponse } from '../types';
+
+export interface ActiveModelInfo {
+  status: string;
+  model_name: string;
+  model_version: string;
+  registered_at: string;
+  model_status: string;
+  metrics: {
+    precision: number;
+    recall: number;
+    f1: number;
+    roc_auc: number;
+    pr_auc: number;
+  };
+  feature_count: number;
+  hyperparameters: Record<string, any>;
+  sha256: string;
+  integrity_verified: boolean;
+  threshold: number;
+}
+
+export interface FeatureDriftDetail {
+  name: string;
+  type: string;
+  drift_score: number;
+  p_value: number;
+  drift_detected: boolean;
+  severity: 'STABLE' | 'WARNING' | 'CRITICAL';
+  status: 'STABLE' | 'DRIFTING';
+  baseline_stats: {
+    mean?: number;
+    std?: number;
+    min?: number;
+    max?: number;
+    sample_count?: number;
+  };
+  current_stats: {
+    mean?: number;
+    std?: number;
+    min?: number;
+    max?: number;
+    sample_count?: number;
+  };
+}
+
+export interface MonitoringAlert {
+  severity: string;
+  title: string;
+  message: string;
+  affected_features?: string[];
+  timestamp: string;
+}
+
+export interface DriftStatusResponse {
+  monitoring_id: string;
+  status: 'STABLE' | 'WARNING' | 'CRITICAL' | 'INSUFFICIENT_DATA';
+  overall_score: number;
+  features_checked: number;
+  features_drifted: number;
+  model_name: string;
+  model_version: string;
+  timestamp: string;
+  recommended_action: string;
+  alerts: MonitoringAlert[];
+  features: FeatureDriftDetail[];
+}
+
+export interface MonitoringHistoryItem {
+  monitoring_id: string;
+  timestamp: string;
+  model_name: string;
+  model_version: string;
+  overall_status: string;
+  overall_score: number;
+  features_checked: number;
+  features_drifted: number;
+}
+
+export interface PerformanceMetrics {
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  roc_auc: number;
+  pr_auc: number;
+  confusion_matrix: {
+    tn: number;
+    fp: number;
+    fn: number;
+    tp: number;
+  };
+}
+
+export interface PerformanceMonitoringResponse {
+  performance_id: string;
+  status: 'HEALTHY' | 'WARNING' | 'CRITICAL' | 'UNAVAILABLE';
+  model_name: string;
+  model_version: string;
+  threshold: number;
+  timestamp: string;
+  ground_truth_available: boolean;
+  sample_count: number;
+  metrics: PerformanceMetrics | null;
+  baseline: {
+    precision: number;
+    recall: number;
+    f1: number;
+    roc_auc: number;
+    pr_auc: number;
+  };
+  deltas?: {
+    precision_delta: number;
+    recall_delta: number;
+    f1_delta: number;
+    roc_auc_delta: number;
+    pr_auc_delta: number;
+  };
+  confusion_matrix?: {
+    tn: number;
+    fp: number;
+    fn: number;
+    tp: number;
+  };
+  churn_rate_analysis?: {
+    actual_churn_rate_pct: number;
+    predicted_churn_rate_pct: number;
+    churn_rate_diff_pct: number;
+  };
+  probability_distribution?: {
+    min: number;
+    max: number;
+    mean: number;
+    median: number;
+    std: number;
+  };
+  alerts: MonitoringAlert[];
+  recommended_action: string;
+}
+
+export interface PerformanceHistoryItem {
+  performance_id: string;
+  timestamp: string;
+  model_name: string;
+  model_version: string;
+  status: string;
+  precision: number;
+  recall: number;
+  f1: number;
+  roc_auc: number;
+  pr_auc: number;
+}
+
+// Data Quality Interfaces (TASK 11)
+export interface DataQualityIssueItem {
+  field: string;
+  issue_type: string;
+  severity: 'CRITICAL' | 'ERROR' | 'WARNING' | 'INFO';
+  message: string;
+  value?: any;
+}
+
+export interface CustomerValidationResponse {
+  customer_id: string;
+  is_valid: boolean;
+  has_critical_errors: boolean;
+  can_proceed_to_inference: boolean;
+  quality_score: number;
+  quality_status: 'EXCELLENT' | 'GOOD' | 'WARNING' | 'CRITICAL';
+  issues: DataQualityIssueItem[];
+  issue_count: number;
+  timestamp: string;
+}
+
+export interface FieldIssueSummary {
+  field: string;
+  issue_type: string;
+  severity: string;
+  affected_count: number;
+  sample_message: string;
+}
+
+export interface DataQualityReportResponse {
+  overall_quality_score: number;
+  quality_status: 'EXCELLENT' | 'GOOD' | 'WARNING' | 'CRITICAL';
+  total_records: number;
+  valid_records: number;
+  invalid_records: number;
+  duplicate_count: number;
+  missing_values_count: number;
+  field_issues: FieldIssueSummary[];
+  timestamp: string;
+  alerts: { severity: string; title: string; message: string; timestamp: string }[];
+}
+
+export const getModelMetrics = async (): Promise<ModelMetricsResponse> => {
+  return fetchApi<ModelMetricsResponse>(`/models/metrics`);
+};
+
+export const getActiveModelInfo = async (): Promise<ActiveModelInfo> => {
+  return fetchApi<ActiveModelInfo>(`/model-info`);
+};
+
+export const getMonitoringStatus = async (): Promise<DriftStatusResponse> => {
+  return fetchApi<DriftStatusResponse>(`/monitoring/status`);
+};
+
+export const getMonitoringHistory = async (): Promise<MonitoringHistoryItem[]> => {
+  return fetchApi<MonitoringHistoryItem[]>(`/monitoring/history`);
+};
+
+export const runMonitoringScan = async (): Promise<{ status: string; run: DriftStatusResponse }> => {
+  return fetchApi<{ status: string; run: DriftStatusResponse }>(`/monitoring/run`, {
+    method: 'POST',
+  });
+};
+
+export const getPerformanceMonitoring = async (): Promise<PerformanceMonitoringResponse> => {
+  return fetchApi<PerformanceMonitoringResponse>(`/monitoring/performance`);
+};
+
+export const getPerformanceHistory = async (): Promise<PerformanceHistoryItem[]> => {
+  return fetchApi<PerformanceHistoryItem[]>(`/monitoring/performance/history`);
+};
+
+export const runPerformanceScan = async (): Promise<{ status: string; run: PerformanceMonitoringResponse }> => {
+  return fetchApi<{ status: string; run: PerformanceMonitoringResponse }>(`/monitoring/performance/run`, {
+    method: 'POST',
+  });
+};
+
+export const getDataQualityReport = async (): Promise<DataQualityReportResponse> => {
+  return fetchApi<DataQualityReportResponse>(`/data-quality`);
+};
+
+export const getCustomerDataQuality = async (customerId: string): Promise<CustomerValidationResponse> => {
+  return fetchApi<CustomerValidationResponse>(`/data-quality/customer/${customerId}`);
+};
+
+export const validateCustomerData = async (payload: Record<string, any>): Promise<CustomerValidationResponse> => {
+  return fetchApi<CustomerValidationResponse>(`/data-quality/validate`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+};
+
+export const promoteCandidateModel = async (version: string): Promise<{ status: string; promoted_version: string }> => {
+  return fetchApi<{ status: string; promoted_version: string }>(`/models/promote/${version}`, {
+    method: 'POST',
+  });
+};
+
+// ── Observability / Operational Metrics (TASK 12) ───────────────────────────
+
+export interface LatencyStats {
+  avg_ms: number;
+  min_ms: number;
+  max_ms: number;
+  count: number;
+}
+
+export interface OperationalMetrics {
+  collected_at: string;
+  uptime_seconds: number;
+  api: {
+    requests_total: number;
+    errors_total: number;
+    error_rate: number;
+    latency: LatencyStats;
+  };
+  predictions: {
+    requests_total: number;
+    errors_total: number;
+    latency: LatencyStats;
+  };
+  data_quality: {
+    failures_total: number;
+  };
+  model: {
+    load_total: number;
+    integrity_failures_total: number;
+  };
+  monitoring: {
+    drift_alerts_total: number;
+  };
+  endpoints: Record<string, { total: number; errors: number }>;
+}
+
+export interface OperationalMetricsResponse {
+  status: string;
+  service: string;
+  version: string;
+  environment: string;
+  metrics: OperationalMetrics;
+}
+
+export interface AuditEvent {
+  id: number;
+  timestamp: string;
+  actor_email: string;
+  actor_role: string;
+  action: string;
+  target_resource: string;
+  details: string | null;
+  request_id: string | null;
+  model_version: string | null;
+  event_type: string | null;
+  status: string;
+}
+
+export interface AuditEventsResponse {
+  total: number;
+  limit: number;
+  filters: {
+    event_type: string | null;
+    status: string | null;
+    model_version: string | null;
+    since: string | null;
+    until: string | null;
+  };
+  events: AuditEvent[];
+}
+
+export const getOperationalMetrics = async (): Promise<OperationalMetricsResponse> => {
+  return fetchApi<OperationalMetricsResponse>(`/metrics`);
+};
+
+export const getAuditEvents = async (params?: {
+  limit?: number;
+  event_type?: string;
+  status?: string;
+  model_version?: string;
+  since?: string;
+  until?: string;
+}): Promise<AuditEventsResponse> => {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.event_type) query.set('event_type', params.event_type);
+  if (params?.status) query.set('status', params.status);
+  if (params?.model_version) query.set('model_version', params.model_version);
+  if (params?.since) query.set('since', params.since);
+  if (params?.until) query.set('until', params.until);
+  const qs = query.toString() ? `?${query.toString()}` : '';
+  return fetchApi<AuditEventsResponse>(`/audit/events${qs}`);
+};
+

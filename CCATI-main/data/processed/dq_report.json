@@ -1,0 +1,20 @@
+{
+  "total_rows_received": 2,
+  "valid_rows_passed": 1,
+  "malformed_rows_filtered": 1,
+  "null_counts": {
+    "customer_id": 0,
+    "plan_tier": 0,
+    "contract_type": 0,
+    "tenure_months": 0,
+    "monthly_charges": 0,
+    "total_charges": 0,
+    "call_minutes_m1": 0,
+    "call_minutes_m3": 0,
+    "data_gb_m1": 0,
+    "data_gb_m3": 0,
+    "support_calls_m1": 0
+  },
+  "schema_validation": "PASSED",
+  "status": "PASSED_WITH_WARNINGS"
+}
