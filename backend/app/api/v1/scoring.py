@@ -60,6 +60,7 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
 
     prob = float(row["churn_probability"])
     risk_tier = calculate_risk_tier(prob)
+    confidence = round(max(prob, 1.0 - prob), 4)
 
     # Parse SHAP top features
     raw_shap = json.loads(row["shap_json"]) if row["shap_json"] else []
@@ -94,7 +95,7 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
         customer_id=row["customer_id"],
         churn_probability=round(prob, 4),
         risk_tier=risk_tier,
-        confidence_score=0.94,
+        confidence_score=confidence,
         model_name=active_model_name,
         model_version=active_model_version,
         prediction_timestamp=now_iso,

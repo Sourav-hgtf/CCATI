@@ -4,7 +4,7 @@ import time
 import uuid
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.api.v1 import admin, auth, customers, export, health, models, scoring, segments
+from backend.app.api.v1 import admin, analytics, auth, customers, export, health, models, scoring, segments
 from backend.app.core.config import settings
 
 logger = logging.getLogger("telecom_churn_backend")
@@ -55,6 +55,7 @@ async def correlation_id_logging_middleware(request: Request, call_next):
 app.include_router(health.router, tags=["Health"])
 app.include_router(health.router, prefix=settings.API_V1_STR, tags=["Health"])
 app.include_router(auth.router, prefix=settings.API_V1_STR, tags=["Auth"])
+app.include_router(analytics.router, prefix=settings.API_V1_STR, tags=["Analytics"])
 app.include_router(customers.router, prefix=settings.API_V1_STR, tags=["Customers"])
 app.include_router(segments.router, prefix=settings.API_V1_STR, tags=["Segments"])
 app.include_router(models.router, prefix=settings.API_V1_STR, tags=["Model Monitoring"])
