@@ -16,6 +16,14 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
     });
 
     if (!response.ok) {
+      if (response.status === 401 && !endpoint.includes('/auth/login')) {
+        // Clear invalid or expired session tokens
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('auth_user');
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      }
+
       const errorData = await response.json().catch(() => ({}));
       const message =
         typeof errorData.detail === 'string'

@@ -23,7 +23,7 @@ router = APIRouter()
 @router.get("/analytics/summary", response_model=OverviewMetricsResponse)
 def get_analytics_overview(
     range: str = Query("30d"),
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/analytics/overview — Aggregated KPI metrics directly from customer_scores database."""
     _ensure_scores_seeded()
@@ -94,7 +94,7 @@ def get_analytics_overview(
 @router.get("/analytics/distribution", response_model=list[RiskDistributionPointResponse])
 @router.get("/analytics/risk-distribution", response_model=list[RiskDistributionPointResponse])
 def get_risk_distribution(
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/analytics/distribution — Risk tier distribution aggregated from production model scores."""
     _ensure_scores_seeded()
@@ -134,7 +134,7 @@ def get_risk_distribution(
 @router.get("/analytics/trend", response_model=list[ChurnTrendPointResponse])
 def get_churn_trend(
     period: str = Query("monthly"),
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/analytics/trend — Monthly churn trend aggregated from database records."""
     _ensure_scores_seeded()
@@ -178,7 +178,7 @@ def get_churn_trend(
 
 @router.get("/analytics/contracts", response_model=list[ContractBreakdownResponse])
 def get_contract_breakdown(
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/analytics/contracts — Churn rate aggregated by contract type."""
     _ensure_scores_seeded()

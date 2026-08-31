@@ -80,7 +80,7 @@ def test_3_liveness_and_readiness_probes():
     assert data_ready["checks"]["artifact_integrity"] is True
 
 
-def test_4_error_sanitization_no_stack_traces():
+def test_4_error_sanitization_no_stack_traces(admin_headers):
     """TEST 4: Client errors return structured format without leaking stack traces or internals."""
     # 404 Not Found
     res_404 = client.get("/api/v1/non_existent_security_test_endpoint")
@@ -91,7 +91,7 @@ def test_4_error_sanitization_no_stack_traces():
     assert "Traceback" not in res_404.text
 
     # 422 Validation Error
-    res_422 = client.post("/api/v1/predict", json={"invalid_field": 12345})
+    res_422 = client.post("/api/v1/predict", json={"invalid_field": 12345}, headers=admin_headers)
     assert res_422.status_code == 422
     data_422 = res_422.json()
     assert "error" in data_422

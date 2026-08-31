@@ -257,17 +257,27 @@ export interface SegmentSummaryResponse {
 
 export interface TokenResponse {
   access_token: string;
+  refresh_token: string;
   token_type?: string;
+  expires_in_seconds?: number;
   user_id: string;
   email: string;
+  username?: string;
+  full_name?: string;
   role: string;
+  permissions?: string[];
 }
 
 export interface UserProfileResponse {
   user_id: string;
   email: string;
+  username?: string;
   name: string;
   role: string;
+  permissions?: string[];
+  is_active?: boolean;
+  created_at?: string;
+  last_login_at?: string;
 }
 
 export interface ValidationError {

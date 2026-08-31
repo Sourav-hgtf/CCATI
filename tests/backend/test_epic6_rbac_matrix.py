@@ -12,15 +12,15 @@ client = TestClient(app)
 
 def get_token_for_role(role: str) -> str:
     """Helper to authenticate and retrieve a role-specific JWT bearer token."""
-    role_email_map = {
-        "Executive": "executive@telecom.com",
-        "RetentionManager": "manager@telecom.com",
-        "Analyst": "analyst@telecom.com",
-        "Admin": "admin@telecom.com",
+    role_credentials = {
+        "Executive": ("executive@telecom.com", "Password123!"),
+        "RetentionManager": ("manager@telecom.com", "ManagerPassword123!"),
+        "Analyst": ("analyst@telecom.com", "AnalystPassword123!"),
+        "Admin": ("admin@telecom.com", "AdminPassword123!"),
     }
-    email = role_email_map[role]
-    res = client.post("/api/v1/auth/login", json={"email": email, "password": "Password123!"})
-    assert res.status_code == 200
+    email, password = role_credentials[role]
+    res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
+    assert res.status_code == 200, f"Login failed for {role} ({email}): {res.status_code} {res.text}"
     return res.json()["access_token"]
 
 

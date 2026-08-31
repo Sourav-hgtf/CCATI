@@ -43,7 +43,7 @@ def get_customers(
     search: str | None = None,
     sort_by: str = Query("priority_score", pattern="^(priority_score|churn_probability|tenure_months|monthly_charges)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
-    current_user: UserContext = Depends(require_roles(["RetentionManager", "Analyst", "Admin", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "RetentionManager", "Analyst", "Operations", "Viewer", "Executive"])),
 ):
     """TICKET-502: GET /api/v1/customers (paginated, filterable, sortable)."""
     _ensure_data_seeded()
@@ -124,9 +124,15 @@ def get_customers(
 def get_customer_detail(
     customer_id: str,
     reveal_pii: bool = False,
-    current_user: UserContext = Depends(require_roles(["RetentionManager", "Analyst", "Admin", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "RetentionManager", "Analyst", "Operations", "Viewer", "Executive"])),
 ):
-    """TICKET-503: GET /api/v1/customers/{id} (full customer detail payload)."""
+    # Check PII permissions before executing database query
+    if reveal_pii and current_user.role not in ["RetentionManager", "Admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied. Unmasking PII is restricted to RetentionManager and Admin roles. Current role: '{current_user.role}'",
+        )
+
     _ensure_data_seeded()
     conn = sqlite3.connect(settings.DB_PATH)
     conn.row_factory = sqlite3.Row

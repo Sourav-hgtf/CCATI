@@ -5,7 +5,6 @@ import {
   Search,
   Bell,
   Settings,
-  ChevronDown,
   LayoutDashboard,
   Users,
   BarChart3,
@@ -19,10 +18,14 @@ import {
   History,
   Menu,
   X,
+  LogOut,
+  Shield,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export const HeaderNav: React.FC = () => {
   const navigate = useNavigate();
+  const { user, role, logout, isAuthenticated, hasRole } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
@@ -37,6 +40,29 @@ export const HeaderNav: React.FC = () => {
     { label: 'Model Monitor', path: '/monitoring', icon: Activity },
     { label: 'Reports', path: '/reports', icon: FileSpreadsheet },
   ];
+
+  if (hasRole(['Admin'])) {
+    navItems.push({ label: 'Admin', path: '/admin', icon: Shield });
+  }
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  const getInitials = (name?: string, email?: string) => {
+    if (name) {
+      const parts = name.split(' ');
+      if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+      return name.substring(0, 2).toUpperCase();
+    }
+    if (email) return email.substring(0, 2).toUpperCase();
+    return 'US';
+  };
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-40 bg-[#0B0D12]/95 backdrop-blur-md border-b border-[#272B36] px-6 py-3.5 flex items-center justify-between">
@@ -78,7 +104,7 @@ export const HeaderNav: React.FC = () => {
         })}
       </nav>
 
-      {/* RIGHT: Search, Notifications, Health Indicators, Profile */}
+      {/* RIGHT: Search, Notifications, Health Indicators, Profile & Logout */}
       <div className="flex items-center space-x-3 shrink-0">
         {/* Compact System Health Indicators */}
         <div className="hidden xl:flex items-center space-x-2.5 text-[11px] bg-[#151821] px-3 py-1.5 rounded-full border border-[#272B36]">
@@ -112,17 +138,34 @@ export const HeaderNav: React.FC = () => {
         <button
           onClick={() => navigate('/settings')}
           className="p-2 text-gray-400 hover:text-white bg-[#151821] hover:bg-[#1A1D24] rounded-full border border-[#272B36] transition"
+          title="Settings"
         >
           <Settings className="w-4 h-4" />
         </button>
 
-        {/* Profile Menu */}
+        {/* User Profile & Role Pill */}
         <div className="flex items-center space-x-2 pl-2 border-l border-[#272B36]">
           <div className="w-8 h-8 rounded-full bg-[#F5A623] text-black font-bold text-xs flex items-center justify-center shadow-md">
-            DA
+            {getInitials(user?.name, user?.email)}
           </div>
-          <span className="hidden sm:inline text-xs font-semibold text-gray-200">Dev Admin</span>
+          <div className="hidden sm:flex flex-col text-left">
+            <span className="text-xs font-semibold text-gray-200 leading-tight">
+              {user?.name || user?.email?.split('@')[0]}
+            </span>
+            <span className="text-[10px] font-mono text-[#F5A623] font-medium leading-tight">
+              {role}
+            </span>
+          </div>
         </div>
+
+        {/* Logout Action */}
+        <button
+          onClick={handleLogout}
+          className="p-2 text-gray-400 hover:text-red-400 bg-[#151821] hover:bg-red-500/10 rounded-full border border-[#272B36] hover:border-red-500/30 transition"
+          title="Sign Out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
 
         {/* Mobile Menu Button */}
         <button
@@ -154,6 +197,15 @@ export const HeaderNav: React.FC = () => {
               </NavLink>
             );
           })}
+          <div className="pt-2 border-t border-[#272B36]">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-xs font-semibold text-red-400 hover:bg-red-500/10"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out ({user?.email})</span>
+            </button>
+          </div>
         </div>
       )}
     </header>

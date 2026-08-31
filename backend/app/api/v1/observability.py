@@ -31,7 +31,7 @@ router = APIRouter()
 @router.get("/metrics")
 def get_operational_metrics(
     current_user: UserContext = Depends(
-        require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])
+        require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer"])
     ),
 ):
     """GET /api/v1/metrics — Operational metrics snapshot.
@@ -63,7 +63,7 @@ def list_audit_events(
     since: str | None = Query(None, description="ISO-8601 lower timestamp bound"),
     until: str | None = Query(None, description="ISO-8601 upper timestamp bound"),
     current_user: UserContext = Depends(
-        require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])
+        require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer"])
     ),
 ):
     """GET /api/v1/audit/events — Filterable audit event log.

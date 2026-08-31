@@ -302,7 +302,7 @@ def _compute_customer_prediction(customer_id: str, request_id: str | None = None
 def predict_customer_churn_post(
     payload: PredictRequest,
     request: Request,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "RetentionManager", "Analyst", "ModelManager", "Operations", "Viewer"])),
 ):
     """Real-time churn prediction endpoint for a specific subscriber."""
     req_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
@@ -313,7 +313,7 @@ def predict_customer_churn_post(
 def predict_customer_churn_get(
     customer_id: str,
     request: Request,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "RetentionManager", "Analyst", "ModelManager", "Operations", "Viewer"])),
 ):
     """GET endpoint for customer-specific real-time churn prediction."""
     req_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
@@ -326,7 +326,7 @@ def get_prediction_history(
     page_size: int = Query(20, ge=1, le=100),
     customer_id: str | None = None,
     risk_tier: str | None = None,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "RetentionManager", "Analyst", "ModelManager", "Operations", "Viewer"])),
 ):
     """TASK 6: GET /api/v1/predictions/history — Returns paginated persistent prediction history."""
     _ensure_scores_seeded()
@@ -402,7 +402,7 @@ def get_prediction_history(
 @router.get("/predictions/{prediction_id}", response_model=PredictionHistoryItem)
 def get_prediction_by_id(
     prediction_id: str,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "RetentionManager", "Analyst", "ModelManager", "Operations", "Viewer"])),
 ):
     """TASK 6: GET /api/v1/predictions/{prediction_id} — Retrieve historical prediction snapshot without calling ML model."""
     _ensure_scores_seeded()
@@ -448,7 +448,7 @@ def get_prediction_by_id(
 @router.get("/customers/{customer_id}/predictions", response_model=list[PredictionHistoryItem])
 def get_customer_prediction_history(
     customer_id: str,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "RetentionManager", "Analyst", "ModelManager", "Operations", "Viewer"])),
 ):
     """TASK 6: GET /api/v1/customers/{customer_id}/predictions — Returns chronological prediction history for subscriber."""
     _ensure_scores_seeded()
@@ -514,9 +514,9 @@ def _execute_scoring_task(job_id: str, force_ingestion: bool):
 def trigger_scoring_job(
     payload: ScoringJobTriggerRequest,
     background_tasks: BackgroundTasks,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "ModelManager"])),
 ):
-    """TICKET-506: Trigger a batch scoring job (Admin / Analyst only)."""
+    """TICKET-506: Trigger a batch scoring job (Admin / Analyst / ModelManager / RetentionManager)."""
     job_id = f"job-{uuid.uuid4().hex[:8]}"
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -548,7 +548,7 @@ def trigger_scoring_job(
 @router.get("/scoring-jobs/{job_id}", response_model=ScoringJobResponse)
 def get_scoring_job_status(
     job_id: str,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "RetentionManager", "Analyst", "ModelManager", "Operations", "Viewer"])),
 ):
     """Get current status of a batch scoring job."""
     if job_id not in JOB_STATE:

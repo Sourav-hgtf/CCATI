@@ -53,7 +53,7 @@ class DataQualityReportResponse(BaseModel):
 @router.get("/data-quality", response_model=DataQualityReportResponse)
 @router.get("/monitoring/data-quality", response_model=DataQualityReportResponse)
 def get_data_quality_report(
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/data-quality — Return database-wide Data Quality audit and metrics."""
     engine = DataQualityEngine()
@@ -64,7 +64,7 @@ def get_data_quality_report(
 @router.post("/data-quality/validate", response_model=CustomerValidationResponse)
 def validate_customer_data(
     payload: dict[str, Any],
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
 ):
     """POST /api/v1/data-quality/validate — Validate customer input data without invoking model inference."""
     engine = DataQualityEngine()
@@ -75,7 +75,7 @@ def validate_customer_data(
 @router.get("/data-quality/customer/{customer_id}", response_model=CustomerValidationResponse)
 def get_customer_data_quality(
     customer_id: str,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/data-quality/customer/{customer_id} — Check data quality score for a stored subscriber."""
     import sqlite3

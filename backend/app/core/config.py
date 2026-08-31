@@ -12,8 +12,16 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     SECRET_KEY: str = "supersecret_key_change_in_production_environment_12345"
+    JWT_SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # Short-lived 1-hour access token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7 days refresh token
+    MAX_FAILED_LOGIN_ATTEMPTS: int = 5
+    ACCOUNT_LOCKOUT_MINUTES: int = 15
+
+    @property
+    def get_jwt_secret(self) -> str:
+        return self.JWT_SECRET_KEY if self.JWT_SECRET_KEY else self.SECRET_KEY
 
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://localhost:8000"
     MAX_REQUEST_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB payload protection
@@ -28,13 +36,13 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
     
-    # Fallback to local SQLite only when explicitly requested
-    USE_SQLITE_FALLBACK: bool = False
+    # Fallback to local SQLite for local dev when PostgreSQL is not running
+    USE_SQLITE_FALLBACK: bool = True
     DB_PATH: Path = DATA_DIR / "database" / "telecom_churn.db"
     
     @property
     def get_database_url(self) -> str:
-        if self.USE_SQLITE_FALLBACK:
+        if self.USE_SQLITE_FALLBACK or self.DATABASE_URL.startswith("sqlite"):
             return f"sqlite:///{self.DB_PATH}"
         return self.DATABASE_URL
 

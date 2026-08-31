@@ -17,9 +17,9 @@ router = APIRouter()
 
 
 @router.get("/model-info")
-@router.get("/models/active")
-def get_active_model_info(
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+@router.get("/models/registry")
+def get_model_registry(
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/model-info - Return authoritative metadata for the active production model."""
     registry = ModelRegistry()
@@ -46,7 +46,7 @@ def get_active_model_info(
 @router.get("/monitoring/status")
 @router.get("/monitoring/drift")
 def get_monitoring_status(
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/monitoring/status - Real-time feature drift & statistical model monitoring analysis."""
     registry = ModelRegistry()
@@ -61,7 +61,7 @@ def get_monitoring_status(
 @router.get("/monitoring/history")
 def get_monitoring_history(
     limit: int = 10,
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer"])),
 ):
     """GET /api/v1/monitoring/history - Retrieve historical monitoring run logs."""
     detector = DriftDetector()
@@ -70,7 +70,7 @@ def get_monitoring_history(
 
 @router.post("/monitoring/run")
 def trigger_monitoring_run(
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst"])),
 ):
     """POST /api/v1/monitoring/run - Execute immediate data drift calculation and persist run."""
     registry = ModelRegistry()
@@ -96,7 +96,7 @@ def trigger_monitoring_run(
 @router.get("/monitoring/performance")
 def get_performance_monitoring(
     threshold: float = 0.50,
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer"])),
 ):
     """TASK 9: GET /api/v1/monitoring/performance - Production classification quality evaluation."""
     evaluator = PerformanceEvaluator()
@@ -106,7 +106,7 @@ def get_performance_monitoring(
 @router.get("/monitoring/performance/history")
 def get_performance_history(
     limit: int = 10,
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer"])),
 ):
     """TASK 9: GET /api/v1/monitoring/performance/history - Historical performance run logs."""
     evaluator = PerformanceEvaluator()
@@ -116,7 +116,7 @@ def get_performance_history(
 @router.post("/monitoring/performance/run")
 def trigger_performance_run(
     threshold: float = 0.50,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst"])),
 ):
     """TASK 9: POST /api/v1/monitoring/performance/run - Execute model performance evaluation scan."""
     evaluator = PerformanceEvaluator()
@@ -136,7 +136,7 @@ def trigger_performance_run(
 
 @router.get("/models/metrics", response_model=ModelMetricsResponse)
 def get_model_metrics(
-    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer", "Executive"])),
 ):
     """TICKET-505 / TASK 8 / TASK 9: GET /api/v1/models/metrics (performance history & dynamic drift indicators)."""
     registry = ModelRegistry()
@@ -197,7 +197,7 @@ def get_model_metrics(
 @router.post("/models/promote/{version}")
 def promote_model_version(
     version: str,
-    current_user: UserContext = Depends(require_roles(["Admin", "Analyst"])),
+    current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst"])),
 ):
     """Promote a registered model version to active production model."""
     registry = ModelRegistry()
