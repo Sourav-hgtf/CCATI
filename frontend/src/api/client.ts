@@ -1,4 +1,4 @@
-const API_BASE = '/api/v1';
+const API_BASE = ((import.meta.env.VITE_API_URL as string) || '').replace(/\/$/, '') + '/api/v1';
 
 export async function fetchApi<T>(endpoint: string, options: RequestInit = {}, fallbackMockData?: T): Promise<T> {
   const rawToken = localStorage.getItem('auth_token');
@@ -20,7 +20,11 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}, f
         return fallbackMockData;
       }
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `API error: ${response.status}`);
+      const message =
+        typeof errorData.detail === 'string'
+          ? errorData.detail
+          : errorData.error?.message || `API error: ${response.status}`;
+      throw new Error(message);
     }
 
     return await response.json();

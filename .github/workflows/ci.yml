@@ -19,15 +19,24 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+          cache: "pip"
 
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Backend Pytest Suite
+      - name: Validate Python Syntax
         run: |
-          python -m pytest
+          python -m py_compile backend/app/main.py ml_engine/monitoring/performance_evaluator.py ml_engine/monitoring/drift_detector.py
+
+      - name: Run Backend Pytest Suite
+        env:
+          APP_ENV: testing
+          SECRET_KEY: test_secret_key_ci_environment_32chars_long_12345
+          ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+        run: |
+          python -m pytest -v
 
   frontend-build:
     name: Frontend Build & Type Check (Node 20)
@@ -41,6 +50,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install Frontend Dependencies
         working-directory: ./frontend
@@ -48,4 +59,6 @@ jobs:
 
       - name: Frontend Type Check & Vite Build
         working-directory: ./frontend
+        env:
+          VITE_API_URL: "http://localhost:8000"
         run: npm run build

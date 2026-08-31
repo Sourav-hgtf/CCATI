@@ -35,7 +35,7 @@ def evaluate_classifier(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.ndar
     except Exception:
         pr_auc = 0.0
 
-    cm = confusion_matrix(y_true, y_pred)
+    cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
     tn, fp, fn, tp = cm.ravel()
 
     metrics = {

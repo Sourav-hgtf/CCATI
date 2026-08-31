@@ -5,13 +5,36 @@ Evaluates classification performance (Accuracy, Precision, Recall, F1, ROC-AUC, 
 
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 import sqlite3
 from typing import Any
 import uuid
 import numpy as np
+import yaml
 from backend.app.core.config import settings
 from ml_engine.pipelines.evaluation import evaluate_classifier
 from ml_engine.registry.model_registry import ModelRegistry
+
+
+def load_performance_rules_config() -> dict[str, Any]:
+    """Load performance degradation rules from centralized YAML configuration."""
+    config_path = Path("business_engine/rules_config.yaml")
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                return data.get("performance_degradation", {})
+        except Exception:
+            pass
+    return {
+        "precision_baseline": 0.8392,
+        "recall_baseline": 1.0000,
+        "f1_baseline": 0.9125,
+        "roc_auc_baseline": 0.9432,
+        "pr_auc_baseline": 0.8719,
+        "warning_drop_pct": 0.05,
+        "critical_drop_pct": 0.15,
+    }
 
 
 class PerformanceEvaluator:
@@ -19,6 +42,7 @@ class PerformanceEvaluator:
 
     def __init__(self, db_path: str = settings.DB_PATH):
         self.db_path = db_path
+        self.rules = load_performance_rules_config()
 
     def _get_connection(self):
         conn = sqlite3.connect(self.db_path, timeout=30.0)
@@ -66,22 +90,22 @@ class PerformanceEvaluator:
             baseline_metrics = active_info.get(
                 "metrics",
                 {
-                    "precision": 0.8392,
-                    "recall": 1.0000,
-                    "f1": 0.9125,
-                    "roc_auc": 0.9432,
-                    "pr_auc": 0.8719,
+                    "precision": self.rules.get("precision_baseline", 0.8392),
+                    "recall": self.rules.get("recall_baseline", 1.0000),
+                    "f1": self.rules.get("f1_baseline", 0.9125),
+                    "roc_auc": self.rules.get("roc_auc_baseline", 0.9432),
+                    "pr_auc": self.rules.get("pr_auc_baseline", 0.8719),
                 },
             )
         except Exception:
             m_name = model_name or "Candidate_RandomForest"
             m_version = model_version or "v1788203728"
             baseline_metrics = {
-                "precision": 0.8392,
-                "recall": 1.0000,
-                "f1": 0.9125,
-                "roc_auc": 0.9432,
-                "pr_auc": 0.8719,
+                "precision": self.rules.get("precision_baseline", 0.8392),
+                "recall": self.rules.get("recall_baseline", 1.0000),
+                "f1": self.rules.get("f1_baseline", 0.9125),
+                "roc_auc": self.rules.get("roc_auc_baseline", 0.9432),
+                "pr_auc": self.rules.get("pr_auc_baseline", 0.8719),
             }
 
         with self._get_connection() as conn:
@@ -112,7 +136,7 @@ class PerformanceEvaluator:
                 "threshold": threshold,
                 "timestamp": now_str,
                 "ground_truth_available": False,
-                "sample_count": len(rows),
+                "sample_count": len(rows) if rows else 0,
                 "metrics": None,
                 "baseline": baseline_metrics,
                 "confusion_matrix": None,
@@ -128,8 +152,38 @@ class PerformanceEvaluator:
             }
             return result
 
-        y_true = np.array([int(r["actual_churn"]) for r in rows])
-        y_proba = np.array([float(r["churn_probability"]) for r in rows])
+        # Extract and sanitize probabilities and labels
+        valid_pairs = []
+        for r in rows:
+            try:
+                actual = int(r["actual_churn"])
+                prob = float(r["churn_probability"])
+                if not np.isnan(prob) and 0.0 <= prob <= 1.0 and actual in (0, 1):
+                    valid_pairs.append((actual, prob))
+            except (ValueError, TypeError):
+                continue
+
+        if len(valid_pairs) < 5:
+            result = {
+                "performance_id": perf_id,
+                "status": "UNAVAILABLE",
+                "message": "Insufficient valid ground-truth labels for production performance monitoring.",
+                "model_name": m_name,
+                "model_version": m_version,
+                "threshold": threshold,
+                "timestamp": now_str,
+                "ground_truth_available": False,
+                "sample_count": len(valid_pairs),
+                "metrics": None,
+                "baseline": baseline_metrics,
+                "confusion_matrix": None,
+                "alerts": [],
+                "recommended_action": "Ground-truth labels are required before production performance can be evaluated.",
+            }
+            return result
+
+        y_true = np.array([p[0] for p in valid_pairs])
+        y_proba = np.array([p[1] for p in valid_pairs])
         y_pred = np.where(y_proba >= threshold, 1, 0)
 
         clf_metrics = evaluate_classifier(y_true, y_pred, y_proba)
@@ -157,10 +211,13 @@ class PerformanceEvaluator:
         f1_delta = float(round(clf_metrics["f1"] - base_f1, 4))
         roc_auc_delta = float(round(clf_metrics["roc_auc"] - base_roc, 4))
 
-        if f1_delta <= -0.15 or roc_auc_delta <= -0.15:
+        crit_drop = self.rules.get("critical_drop_pct", 0.15)
+        warn_drop = self.rules.get("warning_drop_pct", 0.05)
+
+        if f1_delta <= -crit_drop or roc_auc_delta <= -crit_drop:
             status = "CRITICAL"
             recommendation = "Significant performance degradation detected! Validate production data and consider model retraining."
-        elif f1_delta <= -0.05 or roc_auc_delta <= -0.05:
+        elif f1_delta <= -warn_drop or roc_auc_delta <= -warn_drop:
             status = "WARNING"
             recommendation = "Moderate performance degradation detected compared to baseline. Review recent customer segments."
         else:
@@ -183,7 +240,7 @@ class PerformanceEvaluator:
             "threshold": threshold,
             "timestamp": now_str,
             "ground_truth_available": True,
-            "sample_count": len(rows),
+            "sample_count": len(valid_pairs),
             "metrics": clf_metrics,
             "baseline": baseline_metrics,
             "deltas": deltas,
@@ -210,7 +267,7 @@ class PerformanceEvaluator:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO performance_history
+                INSERT OR REPLACE INTO performance_history 
                 (performance_id, timestamp, model_name, model_version, status, precision, recall, f1, roc_auc, pr_auc, report_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
