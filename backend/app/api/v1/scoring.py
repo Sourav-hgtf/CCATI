@@ -52,78 +52,44 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    if row:
-        prob = float(row["churn_probability"])
-        risk_tier = calculate_risk_tier(prob)
-
-        # Parse SHAP top features
-        raw_shap = json.loads(row["shap_json"]) if row["shap_json"] else []
-        top_features = []
-        for feat in raw_shap:
-            val = feat.get("value", feat.get("feature_value", ""))
-            impact_val = feat.get("impact", "Increase" if feat.get("importance", 0) > 0 else "Decrease")
-            top_features.append(
-                FeatureAttributionItem(
-                    feature_name=feat.get("feature", feat.get("feature_name", "unknown")),
-                    feature_value=str(val),
-                    contribution=round(float(feat.get("importance", feat.get("contribution", 0.1))), 4),
-                    impact=impact_val,
-                )
-            )
-
-        # Recommendation name
-        rec_data = json.loads(row["recommendation_json"]) if row["recommendation_json"] else {}
-        rec_action = rec_data.get("action_name", "Standard Retention Engagement")
-
-        return PredictResponse(
-            customer_id=row["customer_id"],
-            churn_probability=round(prob, 4),
-            risk_tier=risk_tier,
-            confidence_score=0.94,
-            model_name="Candidate_RandomForest",
-            model_version="v1788203728",
-            prediction_timestamp=now_iso,
-            top_features=top_features,
-            recommended_action=rec_action,
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Subscriber record '{cid_clean}' not found in database. Run batch scoring to ingest new records.",
         )
 
-    # Fallback for unknown customer IDs: compute deterministic prediction from customer_id hash
-    hash_val = sum(ord(c) for c in cid_clean) % 100
-    prob = round(hash_val / 100.0, 4)
+    prob = float(row["churn_probability"])
     risk_tier = calculate_risk_tier(prob)
 
-    is_high = prob >= 0.50
-    fallback_features = [
-        FeatureAttributionItem(
-            feature_name="usage_drop_call_pct",
-            feature_value="-32%" if is_high else "+5%",
-            contribution=0.42 if is_high else -0.25,
-            impact="Increase" if is_high else "Decrease",
-        ),
-        FeatureAttributionItem(
-            feature_name="support_calls_m1",
-            feature_value="6 calls" if is_high else "0 calls",
-            contribution=0.35 if is_high else -0.18,
-            impact="Increase" if is_high else "Decrease",
-        ),
-        FeatureAttributionItem(
-            feature_name="contract_type",
-            feature_value="Month-to-Month" if is_high else "Two Year",
-            contribution=0.21 if is_high else -0.30,
-            impact="Increase" if is_high else "Decrease",
-        ),
-    ]
+    # Parse SHAP top features
+    raw_shap = json.loads(row["shap_json"]) if row["shap_json"] else []
+    top_features = []
+    for feat in raw_shap:
+        val = feat.get("value", feat.get("feature_value", ""))
+        impact_val = feat.get("impact", "Increase" if feat.get("importance", 0) > 0 else "Decrease")
+        top_features.append(
+            FeatureAttributionItem(
+                feature_name=feat.get("feature", feat.get("feature_name", "unknown")),
+                feature_value=str(val),
+                contribution=round(float(feat.get("importance", feat.get("contribution", 0.1))), 4),
+                impact=impact_val,
+            )
+        )
+
+    # Recommendation name
+    rec_data = json.loads(row["recommendation_json"]) if row["recommendation_json"] else {}
+    rec_action = rec_data.get("action_name", "Standard Retention Engagement")
 
     return PredictResponse(
-        customer_id=cid_clean,
-        churn_probability=prob,
+        customer_id=row["customer_id"],
+        churn_probability=round(prob, 4),
         risk_tier=risk_tier,
-        confidence_score=0.91,
+        confidence_score=0.94,
         model_name="Candidate_RandomForest",
         model_version="v1788203728",
         prediction_timestamp=now_iso,
-        top_features=fallback_features,
-        recommended_action="20% Loyalty Bill Discount" if is_high else "Contract Extension Bonus",
+        top_features=top_features,
+        recommended_action=rec_action,
     )
 
 

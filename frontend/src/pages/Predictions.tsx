@@ -20,7 +20,7 @@ export const Predictions: React.FC = () => {
       }
     },
     onError: () => {
-      setResult(null); // Clear stale state on API failure
+      setResult(null); // Clear stale prediction state on API/Model failure
     },
   });
 
@@ -34,7 +34,7 @@ export const Predictions: React.FC = () => {
     const cleanId = selectedCustomerId.trim();
     if (cleanId) {
       setActiveSearchId(cleanId);
-      setResult(null); // PHASE 4: Immediately invalidate previous prediction state
+      setResult(null); // Immediately clear previous prediction state
       mutation.mutate(cleanId);
     }
   };
@@ -42,7 +42,7 @@ export const Predictions: React.FC = () => {
   const handleSelectQuickCustomer = (id: string) => {
     setSelectedCustomerId(id);
     setActiveSearchId(id);
-    setResult(null); // PHASE 4: Immediately invalidate previous prediction state
+    setResult(null); // Immediately clear previous prediction state
     mutation.mutate(id);
   };
 
@@ -62,7 +62,7 @@ export const Predictions: React.FC = () => {
           <BrainCircuit className="w-6 h-6 text-[#F5A623]" />
           <span>Real-time Churn Prediction Workspace</span>
         </h1>
-        <p className="text-xs text-gray-400 mt-1">Run ML inference to compute instant subscriber churn risk probabilities and feature explanations.</p>
+        <p className="text-xs text-gray-400 mt-1">Run production ML inference to compute instant subscriber churn risk probabilities and feature explanations.</p>
       </div>
 
       {/* Customer Selector Form */}
@@ -135,19 +135,32 @@ export const Predictions: React.FC = () => {
       {mutation.isPending && (
         <div className="dark-card p-12 text-center text-gray-400 flex flex-col items-center justify-center space-y-3 border-[#272B36]">
           <RefreshCw className="w-6 h-6 text-[#F5A623] animate-spin" />
-          <span className="text-xs font-semibold">Computing inference prediction for subscriber <strong className="text-white font-mono">{activeSearchId}</strong>...</span>
+          <span className="text-xs font-semibold">Executing production ML inference for <strong className="text-white font-mono">{activeSearchId}</strong>...</span>
         </div>
       )}
 
       {/* Error State */}
       {mutation.isError && !mutation.isPending && (
-        <div className="dark-card p-6 text-center text-red-400 flex flex-col items-center justify-center space-y-2 border-red-500/30 bg-red-950/20">
-          <AlertTriangle className="w-6 h-6 text-red-400" />
-          <span className="text-xs font-semibold">Unable to fetch prediction for {activeSearchId}. Please verify Customer ID and retry.</span>
+        <div className="dark-card p-8 text-center flex flex-col items-center justify-center space-y-4 border-red-500/40 bg-red-950/20">
+          <AlertTriangle className="w-8 h-8 text-red-400" />
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-red-300">Prediction Service Unavailable</h3>
+            <p className="text-xs text-gray-400 max-w-md">
+              Production ML inference could not be obtained for subscriber <strong className="text-white font-mono">{activeSearchId}</strong>.
+              Please verify the subscriber ID or ensure batch scoring has ingested this record.
+            </p>
+          </div>
+          <button
+            onClick={() => handlePredict()}
+            className="px-4 py-2 rounded-lg bg-red-900/60 hover:bg-red-900 border border-red-500/50 text-xs font-semibold text-white flex items-center space-x-2 transition"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry Prediction</span>
+          </button>
         </div>
       )}
 
-      {/* Synchronized Prediction Output Card */}
+      {/* Synchronized Production ML Prediction Output Card */}
       {result && isMatchingCustomer && !mutation.isPending && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -210,7 +223,7 @@ export const Predictions: React.FC = () => {
                 <div className="bg-[#1A1D24] p-3 rounded-lg border border-[#272B36] space-y-1">
                   <span className="text-gray-400 text-[10px]">Inference Status</span>
                   <p className="font-semibold text-emerald-400 flex items-center">
-                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Success (200 OK)
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Real ML Inference (200 OK)
                   </p>
                 </div>
               </div>
