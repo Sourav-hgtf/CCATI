@@ -1,4 +1,4 @@
-"""Model Monitoring and Registry Information Endpoints (TICKET-505, TASK 3)."""
+"""Model Monitoring, Data Drift, and Registry Information Endpoints (TICKET-505, TASK 3, TASK 8)."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from backend.app.core.audit import log_audit_event
@@ -9,6 +9,7 @@ from backend.app.schemas.model_metrics import (
     MetricRun,
     ModelMetricsResponse,
 )
+from ml_engine.monitoring.drift_detector import DriftDetector
 from ml_engine.registry.model_registry import ModelRegistry
 
 router = APIRouter()
@@ -41,11 +42,58 @@ def get_active_model_info(
         raise HTTPException(status_code=404, detail=f"No active production model found: {str(e)}")
 
 
+@router.get("/monitoring/status")
+@router.get("/monitoring/drift")
+def get_monitoring_status(
+    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+):
+    """GET /api/v1/monitoring/status - Real-time feature drift & statistical model monitoring analysis."""
+    registry = ModelRegistry()
+    active_m = registry.get_active_model_info()
+    detector = DriftDetector()
+    return detector.run_drift_analysis(
+        model_name=active_m.get("model_name", "Candidate_RandomForest"),
+        model_version=active_m.get("version", "v1788203728"),
+    )
+
+
+@router.get("/monitoring/history")
+def get_monitoring_history(
+    limit: int = 10,
+    current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
+):
+    """GET /api/v1/monitoring/history - Retrieve historical monitoring run logs."""
+    detector = DriftDetector()
+    return detector.get_monitoring_history(limit=limit)
+
+
+@router.post("/monitoring/run")
+def trigger_monitoring_run(
+    current_user: UserContext = Depends(require_roles(["Admin", "Analyst"])),
+):
+    """POST /api/v1/monitoring/run - Execute immediate data drift calculation and persist run."""
+    registry = ModelRegistry()
+    active_m = registry.get_active_model_info()
+    detector = DriftDetector()
+    result = detector.run_drift_analysis(
+        model_name=active_m.get("model_name", "Candidate_RandomForest"),
+        model_version=active_m.get("version", "v1788203728"),
+    )
+    log_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="MONITORING_RUN",
+        target_resource=f"model:{active_m.get('version', 'v1788203728')}",
+        details=f"Executed data drift scan: Status {result['status']}, Score {result['overall_score']}",
+    )
+    return {"status": "SUCCESS", "run": result}
+
+
 @router.get("/models/metrics", response_model=ModelMetricsResponse)
 def get_model_metrics(
     current_user: UserContext = Depends(require_roles(["Analyst", "Admin", "RetentionManager", "Executive"])),
 ):
-    """TICKET-505: GET /api/v1/models/metrics (performance history & drift indicators)."""
+    """TICKET-505 / TASK 8: GET /api/v1/models/metrics (performance history & dynamic drift indicators)."""
     registry = ModelRegistry()
     all_models = registry.list_models()
 
@@ -75,13 +123,23 @@ def get_model_metrics(
             current_version = m["version"]
             promoted_name = m["model_name"]
 
-    # Feature drift report derived from dataset feature stats
-    drift_items = [
-        FeatureDriftItem(feature_name="usage_drop_call_pct", baseline_mean=0.15, current_mean=0.32, drift_score=0.17, status="DRIFTING"),
-        FeatureDriftItem(feature_name="support_calls_m1", baseline_mean=1.2, current_mean=1.4, drift_score=0.04, status="STABLE"),
-        FeatureDriftItem(feature_name="monthly_charges", baseline_mean=649.50, current_mean=655.00, drift_score=0.01, status="STABLE"),
-        FeatureDriftItem(feature_name="tenure_months", baseline_mean=32.4, current_mean=31.8, drift_score=0.02, status="STABLE"),
-    ]
+    # Calculate dynamic feature drift report using real statistical engine
+    detector = DriftDetector()
+    real_drift = detector.run_drift_analysis(model_name=promoted_name, model_version=current_version)
+
+    drift_items = []
+    for f in real_drift.get("features", []):
+        b_mean = f.get("baseline_stats", {}).get("mean", 0.0)
+        c_mean = f.get("current_stats", {}).get("mean", 0.0)
+        drift_items.append(
+            FeatureDriftItem(
+                feature_name=f["name"],
+                baseline_mean=b_mean,
+                current_mean=c_mean,
+                drift_score=f["drift_score"],
+                status="DRIFTING" if f["drift_detected"] else "STABLE",
+            )
+        )
 
     return ModelMetricsResponse(
         current_model_version=current_version,

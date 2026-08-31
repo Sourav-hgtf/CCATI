@@ -38,3 +38,9 @@ risk_tiers:
     prob_min: 0.35
   low:
     prob_min: 0.00
+
+drift:
+  psi_low: 0.10      # PSI < 0.10 -> STABLE
+  psi_medium: 0.25   # 0.10 <= PSI < 0.25 -> WARNING
+  psi_high: 0.25     # PSI >= 0.25 -> CRITICAL
+
