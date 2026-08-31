@@ -16,6 +16,7 @@ import {
   Activity,
   FileSpreadsheet,
   CheckCircle2,
+  History,
   Menu,
   X,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ export const HeaderNav: React.FC = () => {
     { label: 'Customers', path: '/customers', icon: Users },
     { label: 'Churn Analytics', path: '/churn-analytics', icon: BarChart3 },
     { label: 'Predictions', path: '/predictions', icon: BrainCircuit },
+    { label: 'History', path: '/history', icon: History },
     { label: 'Retention', path: '/retention', icon: Target },
     { label: 'Segments', path: '/segmentation', icon: PieChart },
     { label: 'ROI Intelligence', path: '/roi', icon: DollarSign },

@@ -1,4 +1,4 @@
-"""Pydantic Schemas for Batch Scoring Job Triggers."""
+"""Pydantic Schemas for Batch Scoring Job Triggers & Real-time Predictions."""
 
 from pydantic import BaseModel
 
@@ -30,6 +30,7 @@ class FeatureAttributionItem(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    prediction_id: str = ""
     customer_id: str
     churn_probability: float
     risk_tier: str
@@ -40,3 +41,25 @@ class PredictResponse(BaseModel):
     top_features: list[FeatureAttributionItem] = []
     recommended_action: str = ""
 
+
+class PredictionHistoryItem(BaseModel):
+    prediction_id: str
+    customer_id: str
+    churn_probability: float
+    prediction: int
+    risk_tier: str
+    confidence_score: float
+    threshold: float = 0.50
+    model_name: str
+    model_version: str
+    prediction_timestamp: str
+    recommended_action: str | None = None
+    top_features: list[FeatureAttributionItem] = []
+
+
+class PredictionHistoryPaginatedResponse(BaseModel):
+    items: list[PredictionHistoryItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

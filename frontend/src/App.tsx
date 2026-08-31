@@ -7,6 +7,7 @@ import { Customers } from './pages/Customers';
 import { CustomerDetail } from './pages/CustomerDetail';
 import { ChurnAnalytics } from './pages/ChurnAnalytics';
 import { Predictions } from './pages/Predictions';
+import { PredictionHistoryPage } from './pages/PredictionHistory';
 import { Explainability } from './pages/Explainability';
 import { Retention } from './pages/Retention';
 import { Segments } from './pages/Segments';
@@ -37,6 +38,7 @@ export const App: React.FC = () => {
               <Route path="/customers/:id" element={<CustomerDetail currentRole={currentRole} />} />
               <Route path="/churn-analytics" element={<ChurnAnalytics />} />
               <Route path="/predictions" element={<Predictions />} />
+              <Route path="/history" element={<PredictionHistoryPage currentRole={currentRole} />} />
               <Route path="/explainability" element={<Explainability />} />
               <Route path="/segmentation" element={<Segments />} />
               <Route path="/retention" element={<Retention />} />
