@@ -1,0 +1,40 @@
+# Business Engine Action Costs, Expected Save Rates, and Rules Mapping
+
+actions:
+  loyalty_discount:
+    name: "20% Loyalty Bill Discount (6 months)"
+    cost: 150.0
+    expected_save_rate: 0.45
+    description: "Provide a 20% discount on monthly bill for 6 months to high-value at-risk customers."
+  
+  proactive_support:
+    name: "Priority Tech Support Outreach"
+    cost: 50.0
+    expected_save_rate: 0.35
+    description: "Assign a dedicated senior support engineer to resolve outstanding network/billing issues."
+
+  plan_upgrade_offer:
+    name: "Bonus Data & Speed Boost Upgrade"
+    cost: 80.0
+    expected_save_rate: 0.40
+    description: "Offer a free data pack upgrade to re-engage declining data usage subscribers."
+
+  contract_incentive:
+    name: "1-Year Contract Renewal Bonus"
+    cost: 120.0
+    expected_save_rate: 0.50
+    description: "Provide device upgrade voucher upon signing a 12-month renewal contract."
+
+  standard_survey:
+    name: "Automated Feedback Survey & Check-in"
+    cost: 10.0
+    expected_save_rate: 0.15
+    description: "Send automated check-in SMS and offer standard feedback token."
+
+risk_tiers:
+  high:
+    prob_min: 0.70
+  medium:
+    prob_min: 0.35
+  low:
+    prob_min: 0.00

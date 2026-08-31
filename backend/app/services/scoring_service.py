@@ -1,0 +1,141 @@
+"""Scoring Service Orchestrator (TICKET-506).
+
+Orchestrates data loading, ML model inference, SHAP explanations, K-Means clustering,
+business risk scoring, and database persistence.
+"""
+
+from datetime import datetime, timezone
+import json
+import sqlite3
+from typing import Any
+import pandas as pd
+from backend.app.core.config import settings
+from business_engine.recommendations import get_recommended_action
+from business_engine.risk_scoring import calculate_risk_scores
+from ml_engine.config import PROCESSED_DATA_DIR
+from ml_engine.pipelines.clustering import compute_2d_projections, compute_cluster_profiles, prepare_and_scale_features, run_kmeans_clustering
+from ml_engine.pipelines.explainability import compute_shap_explanations
+from ml_engine.pipelines.ingestion import run_batch_ingestion
+from ml_engine.pipelines.training import train_churn_classification_pipeline
+from ml_engine.registry.model_registry import ModelRegistry
+
+
+def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
+    """Execute complete end-to-end scoring pipeline."""
+    start_time = datetime.now(timezone.utc)
+    
+    # Step 1: Data Ingestion & Feature Engineering
+    parquet_path = PROCESSED_DATA_DIR / "customer_features.parquet"
+    if force_ingestion or not parquet_path.exists():
+        print("Running batch ingestion...")
+        run_batch_ingestion()
+
+    df = pd.read_parquet(parquet_path)
+    print(f"Loaded {len(df)} customer feature records for scoring.")
+
+    # Step 2: Load or Train Promoted Model
+    registry = ModelRegistry()
+    try:
+        model, model_info = registry.get_model()
+        print(f"Loaded promoted model version: {model_info['version']}")
+    except ValueError:
+        print("No promoted model found. Training initial model pipeline...")
+        train_churn_classification_pipeline()
+        model, model_info = registry.get_model()
+
+    # Step 3: Classification Model Inference
+    feature_cols = model_info.get("feature_names", [c for c in df.columns if c not in ["customer_id", "name", "phone", "email", "churn"]])
+    X_score = df[feature_cols]
+
+    churn_probs = model.predict_proba(X_score)[:, 1]
+    df["churn_probability"] = churn_probs
+
+    # Step 4: SHAP Explainability
+    print("Computing SHAP feature attributions...")
+    shap_results = compute_shap_explanations(model, X_score, top_n=5)
+
+    # Step 5: K-Means Segmentation & PCA 2D Scatter Coordinates
+    print("Running K-Means customer segmentation (threshold: Churn Prob >= 0.5)...")
+    X_scaled, _, df_target = prepare_and_scale_features(df, min_risk_threshold=0.5)
+    cluster_labels, _, _ = run_kmeans_clustering(X_scaled, k=4)
+    cluster_profiles = compute_cluster_profiles(df_target, cluster_labels)
+    coords_2d = compute_2d_projections(X_scaled)
+
+    # Assign cluster IDs and PCA coordinates to at-risk target population
+    df["cluster_id"] = 0
+    df["pca_x"] = 0.0
+    df["pca_y"] = 0.0
+
+    target_indices = df_target.index
+    df.loc[target_indices, "cluster_id"] = cluster_labels
+    df.loc[target_indices, "pca_x"] = coords_2d[:, 0].round(4)
+    df.loc[target_indices, "pca_y"] = coords_2d[:, 1].round(4)
+
+    # Step 6: Business Risk Scoring & Recommendations
+    print("Computing Business Risk Scores and Retention Recommendations...")
+    risk_scores = calculate_risk_scores(
+        churn_probabilities=churn_probs,
+        monthly_charges=df["monthly_charges"].values,
+        tenures=df["tenure_months"].values,
+    )
+
+    scored_records = []
+    for i, row in df.iterrows():
+        r_score = risk_scores[i]
+        rec = get_recommended_action(
+            risk_tier=r_score["risk_tier"],
+            churn_prob=r_score["churn_probability"],
+            clv=r_score["clv"],
+            support_calls_m1=int(row["support_calls_m1"]),
+            usage_drop_call_pct=float(row["usage_drop_call_pct"]),
+            monthly_charges=float(row["monthly_charges"]),
+        )
+
+        record = {
+            "customer_id": row["customer_id"],
+            "name": row["name"],
+            "phone": row["phone"],
+            "email": row["email"],
+            "region": row["region"],
+            "plan_tier": row["plan_tier"],
+            "contract_type": row["contract_type"],
+            "payment_method": row["payment_method"],
+            "tenure_months": int(row["tenure_months"]),
+            "monthly_charges": float(row["monthly_charges"]),
+            "total_charges": float(row["total_charges"]),
+            "churn_probability": r_score["churn_probability"],
+            "risk_tier": r_score["risk_tier"],
+            "priority_score": r_score["priority_score"],
+            "clv": r_score["clv"],
+            "usage_drop_call_pct": float(row["usage_drop_call_pct"]),
+            "usage_drop_data_pct": float(row["usage_drop_data_pct"]),
+            "support_calls_m1": int(row["support_calls_m1"]),
+            "cluster_id": int(row["cluster_id"]),
+            "pca_x": float(row["pca_x"]),
+            "pca_y": float(row["pca_y"]),
+            "shap_json": json.dumps(shap_results[i]["top_features"]),
+            "recommendation_json": json.dumps(rec),
+            "actioned": False,
+            "actioned_at": None,
+        }
+        scored_records.append(record)
+
+    # Step 7: Persist Scored Records to Database
+    df_scored = pd.DataFrame(scored_records)
+    conn = sqlite3.connect(settings.DB_PATH)
+    df_scored.to_sql("customer_scores", conn, if_exists="replace", index=False)
+
+    # Save cluster profiles to database
+    df_profiles = pd.DataFrame(cluster_profiles)
+    df_profiles.to_sql("segment_profiles", conn, if_exists="replace", index=False)
+    conn.close()
+
+    end_time = datetime.now(timezone.utc)
+    execution_sec = (end_time - start_time).total_seconds()
+
+    return {
+        "status": "SUCCEEDED",
+        "records_processed": len(df_scored),
+        "model_version": model_info["version"],
+        "execution_seconds": round(execution_sec, 2),
+    }
