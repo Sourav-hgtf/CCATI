@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from backend.app.api.v1 import admin, analytics, auth, customers, export, health, models, scoring, segments
+from backend.app.api.v1 import admin, analytics, auth, customers, data_quality, export, health, models, scoring, segments
 from backend.app.core.config import settings
 
 # Configure structured logging
@@ -142,6 +142,7 @@ app.include_router(analytics.router, prefix=settings.API_V1_STR, tags=["Analytic
 app.include_router(customers.router, prefix=settings.API_V1_STR, tags=["Customers"])
 app.include_router(segments.router, prefix=settings.API_V1_STR, tags=["Segments"])
 app.include_router(models.router, prefix=settings.API_V1_STR, tags=["Model Monitoring"])
+app.include_router(data_quality.router, prefix=settings.API_V1_STR, tags=["Data Quality"])
 app.include_router(scoring.router, prefix=settings.API_V1_STR, tags=["Scoring Jobs"])
 app.include_router(export.router, prefix=settings.API_V1_STR, tags=["Data Export"])
 app.include_router(admin.router, prefix=settings.API_V1_STR, tags=["Admin"])

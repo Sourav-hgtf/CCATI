@@ -81,6 +81,23 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
             detail=f"Subscriber record '{cid_clean}' not found in database. Run batch scoring to ingest new records.",
         )
 
+    # Validate data quality prior to inference (TASK 11)
+    from backend.app.services.data_quality import DataQualityEngine
+    dq_engine = DataQualityEngine()
+    dq_res = dq_engine.validate_record(dict(row))
+    if not dq_res["can_proceed_to_inference"]:
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error_code": "DATA_QUALITY_VALIDATION_FAILED",
+                "message": f"Critical data quality validation failed for subscriber '{cid_clean}'. Inference blocked.",
+                "quality_score": dq_res["quality_score"],
+                "quality_status": dq_res["quality_status"],
+                "issues": dq_res["issues"],
+            },
+        )
+
     now_iso = datetime.now(timezone.utc).isoformat()
     prob = float(row["churn_probability"])
     risk_tier = calculate_risk_tier(prob)

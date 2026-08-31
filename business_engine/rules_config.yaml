@@ -53,4 +53,44 @@ performance_degradation:
   warning_drop_pct: 0.05    # > 5% drop in F1/ROC-AUC -> WARNING
   critical_drop_pct: 0.15   # > 15% drop in F1/ROC-AUC -> CRITICAL
 
+data_quality:
+  score_excellent: 90.0
+  score_good: 75.0
+  score_warning: 50.0
+  penalty_critical_error: 25.0
+  penalty_error: 15.0
+  penalty_warning: 5.0
+  penalty_missing_value: 2.0
+  max_tenure_months: 120
+  max_monthly_charges: 3000.0
+  allowed_contract_types:
+    - "Month-to-Month"
+    - "Month-to-month"
+    - "1-Year"
+    - "One year"
+    - "One Year"
+    - "2-Year"
+    - "Two year"
+    - "Two Year"
+  allowed_plan_tiers:
+    - "Basic"
+    - "Standard"
+    - "Premium"
+    - "Enterprise"
+    - "Prepaid Basic"
+    - "Prepaid Unlimited"
+    - "Postpaid Standard"
+    - "Postpaid Premium"
+  allowed_payment_methods:
+    - "Electronic Check"
+    - "Mailed Check"
+    - "Bank Transfer"
+    - "Credit Card"
+    - "UPI"
+    - "Net Banking"
+    - "Auto-Debit"
+    - "UPI/Credit Card"
+
+
+
 

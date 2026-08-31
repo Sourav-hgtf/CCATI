@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { predictCustomerChurn, ChurnPredictionResult } from '../api/predictions';
+import { getCustomerDataQuality } from '../api/monitoring';
 import { StatusBadge } from '../components/common/StatusBadge';
-import { Search, BrainCircuit, Sparkles, CheckCircle2, TrendingUp, TrendingDown, ArrowRight, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Search, BrainCircuit, Sparkles, CheckCircle2, TrendingUp, TrendingDown, ArrowRight, RefreshCw, AlertTriangle, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const Predictions: React.FC = () => {
@@ -12,6 +13,14 @@ export const Predictions: React.FC = () => {
   const [result, setResult] = useState<ChurnPredictionResult | null>(null);
 
   const queryClient = useQueryClient();
+
+  // Task 11 Customer Data Quality Query
+  const { data: dqData } = useQuery({
+    queryKey: ['customer-data-quality', activeSearchId],
+    queryFn: () => getCustomerDataQuality(activeSearchId),
+    enabled: !!activeSearchId,
+    retry: false,
+  });
 
   const mutation = useMutation({
     mutationFn: (id: string) => predictCustomerChurn(id),
@@ -98,39 +107,64 @@ export const Predictions: React.FC = () => {
           </button>
         </form>
 
-        {/* Quick Sample Selector Shortcuts */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#272B36] text-xs">
-          <span className="text-gray-400 font-semibold text-[11px]">Quick Sample Profiles:</span>
+        {/* Quick Sample Selector Shortcuts & Data Quality Tag */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-[#272B36] text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-gray-400 font-semibold text-[11px]">Quick Profiles:</span>
 
-          <span className="text-red-400 font-medium text-[11px] ml-1">High Risk:</span>
-          {['CUST-10164', 'CUST-10628', 'CUST-11267'].map((id) => (
-            <button
-              key={id}
-              onClick={() => handleSelectQuickCustomer(id)}
-              className={`px-2.5 py-1 rounded-md border font-mono text-[11px] transition ${
-                selectedCustomerId.toUpperCase() === id
-                  ? 'bg-red-950/80 border-red-500 text-red-300 font-bold'
-                  : 'bg-[#1A1D24] border-[#272B36] text-gray-400 hover:text-white'
-              }`}
-            >
-              {id}
-            </button>
-          ))}
+            <span className="text-red-400 font-medium text-[11px] ml-1">High Risk:</span>
+            {['CUST-10164', 'CUST-10628', 'CUST-11267'].map((id) => (
+              <button
+                key={id}
+                onClick={() => handleSelectQuickCustomer(id)}
+                className={`px-2.5 py-1 rounded-md border font-mono text-[11px] transition ${
+                  selectedCustomerId.toUpperCase() === id
+                    ? 'bg-red-950/80 border-red-500 text-red-300 font-bold'
+                    : 'bg-[#1A1D24] border-[#272B36] text-gray-400 hover:text-white'
+                }`}
+              >
+                {id}
+              </button>
+            ))}
 
-          <span className="text-emerald-400 font-medium text-[11px] ml-2">Low Risk:</span>
-          {['CUST-10006', 'CUST-10008', 'CUST-10009'].map((id) => (
-            <button
-              key={id}
-              onClick={() => handleSelectQuickCustomer(id)}
-              className={`px-2.5 py-1 rounded-md border font-mono text-[11px] transition ${
-                selectedCustomerId.toUpperCase() === id
-                  ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 font-bold'
-                  : 'bg-[#1A1D24] border-[#272B36] text-gray-400 hover:text-white'
-              }`}
-            >
-              {id}
-            </button>
-          ))}
+            <span className="text-emerald-400 font-medium text-[11px] ml-2">Low Risk:</span>
+            {['CUST-10006', 'CUST-10008', 'CUST-10009'].map((id) => (
+              <button
+                key={id}
+                onClick={() => handleSelectQuickCustomer(id)}
+                className={`px-2.5 py-1 rounded-md border font-mono text-[11px] transition ${
+                  selectedCustomerId.toUpperCase() === id
+                    ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 font-bold'
+                    : 'bg-[#1A1D24] border-[#272B36] text-gray-400 hover:text-white'
+                }`}
+              >
+                {id}
+              </button>
+            ))}
+          </div>
+
+          {/* TASK 11: Compact Data Quality Indicator */}
+          {dqData && (
+            <div className="flex items-center space-x-2 bg-[#151821] px-3 py-1.5 rounded-lg border border-[#272B36]">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Data Quality:</span>
+              <span
+                className={`text-[11px] font-bold flex items-center ${
+                  dqData.has_critical_errors
+                    ? 'text-red-400'
+                    : dqData.quality_status === 'WARNING'
+                    ? 'text-amber-400'
+                    : 'text-emerald-400'
+                }`}
+              >
+                {dqData.has_critical_errors ? (
+                  <AlertCircle className="w-3.5 h-3.5 mr-1 text-red-400" />
+                ) : (
+                  <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+                )}
+                {dqData.quality_score.toFixed(0)}/100 — {dqData.quality_status}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -147,10 +181,10 @@ export const Predictions: React.FC = () => {
         <div className="dark-card p-8 text-center flex flex-col items-center justify-center space-y-4 border-red-500/40 bg-red-950/20">
           <AlertTriangle className="w-8 h-8 text-red-400" />
           <div className="space-y-1">
-            <h3 className="text-sm font-bold text-red-300">Prediction Service Unavailable</h3>
+            <h3 className="text-sm font-bold text-red-300">Prediction Blocked / Unavailable</h3>
             <p className="text-xs text-gray-400 max-w-md">
-              Production ML inference could not be obtained for subscriber <strong className="text-white font-mono">{activeSearchId}</strong>.
-              Please verify the subscriber ID or ensure batch scoring has ingested this record.
+              Production ML inference could not be completed for subscriber <strong className="text-white font-mono">{activeSearchId}</strong>.
+              This may be due to missing records or critical pre-inference data quality validation failures.
             </p>
           </div>
           <button

@@ -152,6 +152,48 @@ export interface PerformanceHistoryItem {
   pr_auc: number;
 }
 
+// Data Quality Interfaces (TASK 11)
+export interface DataQualityIssueItem {
+  field: string;
+  issue_type: string;
+  severity: 'CRITICAL' | 'ERROR' | 'WARNING' | 'INFO';
+  message: string;
+  value?: any;
+}
+
+export interface CustomerValidationResponse {
+  customer_id: string;
+  is_valid: boolean;
+  has_critical_errors: boolean;
+  can_proceed_to_inference: boolean;
+  quality_score: number;
+  quality_status: 'EXCELLENT' | 'GOOD' | 'WARNING' | 'CRITICAL';
+  issues: DataQualityIssueItem[];
+  issue_count: number;
+  timestamp: string;
+}
+
+export interface FieldIssueSummary {
+  field: string;
+  issue_type: string;
+  severity: string;
+  affected_count: number;
+  sample_message: string;
+}
+
+export interface DataQualityReportResponse {
+  overall_quality_score: number;
+  quality_status: 'EXCELLENT' | 'GOOD' | 'WARNING' | 'CRITICAL';
+  total_records: number;
+  valid_records: number;
+  invalid_records: number;
+  duplicate_count: number;
+  missing_values_count: number;
+  field_issues: FieldIssueSummary[];
+  timestamp: string;
+  alerts: { severity: string; title: string; message: string; timestamp: string }[];
+}
+
 export const getModelMetrics = async (): Promise<ModelMetricsResponse> => {
   return fetchApi<ModelMetricsResponse>(`/models/metrics`);
 };
@@ -185,6 +227,21 @@ export const getPerformanceHistory = async (): Promise<PerformanceHistoryItem[]>
 export const runPerformanceScan = async (): Promise<{ status: string; run: PerformanceMonitoringResponse }> => {
   return fetchApi<{ status: string; run: PerformanceMonitoringResponse }>(`/monitoring/performance/run`, {
     method: 'POST',
+  });
+};
+
+export const getDataQualityReport = async (): Promise<DataQualityReportResponse> => {
+  return fetchApi<DataQualityReportResponse>(`/data-quality`);
+};
+
+export const getCustomerDataQuality = async (customerId: string): Promise<CustomerValidationResponse> => {
+  return fetchApi<CustomerValidationResponse>(`/data-quality/customer/${customerId}`);
+};
+
+export const validateCustomerData = async (payload: Record<string, any>): Promise<CustomerValidationResponse> => {
+  return fetchApi<CustomerValidationResponse>(`/data-quality/validate`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 };
 

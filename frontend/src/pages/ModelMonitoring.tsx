@@ -7,6 +7,7 @@ import {
   getPerformanceMonitoring,
   getPerformanceHistory,
   runPerformanceScan,
+  getDataQualityReport,
   getModelMetrics,
   FeatureDriftDetail,
 } from '../api/monitoring';
@@ -25,6 +26,9 @@ import {
   Award,
   Layers,
   HelpCircle,
+  Database,
+  FileCheck,
+  AlertCircle,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react';
@@ -35,7 +39,7 @@ interface ModelMonitoringProps {
 }
 
 export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole }) => {
-  const [activeTab, setActiveTab] = useState<'performance' | 'drift'>('performance');
+  const [activeTab, setActiveTab] = useState<'performance' | 'drift' | 'quality'>('performance');
   const [selectedFeature, setSelectedFeature] = useState<FeatureDriftDetail | null>(null);
 
   // Task 9 Performance Monitoring Queries
@@ -76,16 +80,24 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
     },
   });
 
+  // Task 11 Data Quality Query
+  const { data: qualityData, isLoading: loadingQuality, refetch: refetchQuality } = useQuery({
+    queryKey: ['data-quality-report'],
+    queryFn: getDataQualityReport,
+  });
+
   const { data: metricsData } = useQuery({
     queryKey: ['model-metrics'],
     queryFn: getModelMetrics,
   });
 
-  if (loadingPerf || loadingDrift || !perfData || !driftData) {
+  if (loadingPerf || loadingDrift || loadingQuality || !perfData || !driftData || !qualityData) {
     return (
       <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center space-y-4">
         <RefreshCw className="w-8 h-8 text-[#F5A623] animate-spin" />
-        <span className="text-sm font-semibold text-gray-300">Evaluating production model performance and statistical data drift...</span>
+        <span className="text-sm font-semibold text-gray-300">
+          Loading production monitoring, data drift, and data quality intelligence...
+        </span>
       </div>
     );
   }
@@ -96,14 +108,6 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
   const cm = perfData.confusion_matrix;
   const d = perfData.deltas;
 
-  const chartData = (metricsData?.history || []).map((h, i) => ({
-    run: `Run ${metricsData!.history.length - i}`,
-    Precision: h.precision,
-    Recall: h.recall,
-    F1: h.f1,
-    'PR-AUC': h.pr_auc,
-  }));
-
   return (
     <div className="p-8 space-y-8 max-w-7xl mx-auto">
       {/* Header & Sub-Navigation Tabs */}
@@ -111,10 +115,10 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white flex items-center space-x-2">
             <Activity className="w-6 h-6 text-[#F5A623]" />
-            <span>Model Health & Performance Monitoring</span>
+            <span>Model Health & Data Intelligence</span>
           </h1>
           <p className="text-xs text-gray-400 mt-1">
-            Production classification performance metrics, baseline evaluation deltas, and statistical feature drift.
+            Production classification performance, statistical feature drift, and pre-inference data quality validation.
           </p>
         </div>
 
@@ -127,7 +131,7 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
                 activeTab === 'performance' ? 'bg-[#F5A623] text-black font-bold shadow' : 'text-gray-400 hover:text-white'
               }`}
             >
-              Model Performance & Quality
+              Model Performance
             </button>
             <button
               onClick={() => setActiveTab('drift')}
@@ -137,11 +141,23 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
             >
               Data Drift Intelligence
             </button>
+            <button
+              onClick={() => setActiveTab('quality')}
+              className={`px-4 py-2 rounded-lg transition ${
+                activeTab === 'quality' ? 'bg-[#F5A623] text-black font-bold shadow' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Data Quality & Validation
+            </button>
           </div>
 
           {canTrigger && (
             <button
-              onClick={() => (activeTab === 'performance' ? perfMutation.mutate() : driftMutation.mutate())}
+              onClick={() => {
+                if (activeTab === 'performance') perfMutation.mutate();
+                else if (activeTab === 'drift') driftMutation.mutate();
+                else refetchQuality();
+              }}
               disabled={perfMutation.isPending || driftMutation.isPending}
               className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center space-x-2 shadow-lg shadow-emerald-600/20 transition disabled:opacity-50"
             >
@@ -150,7 +166,13 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
               ) : (
                 <Play className="w-4 h-4 fill-current" />
               )}
-              <span>{activeTab === 'performance' ? 'Run Performance Evaluation' : 'Run Drift Scan'}</span>
+              <span>
+                {activeTab === 'performance'
+                  ? 'Run Performance Evaluation'
+                  : activeTab === 'drift'
+                  ? 'Run Drift Scan'
+                  : 'Re-audit Data Quality'}
+              </span>
             </button>
           )}
         </div>
@@ -454,6 +476,117 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: DATA QUALITY & VALIDATION (TASK 11) */}
+      {activeTab === 'quality' && (
+        <div className="space-y-8">
+          {/* 5 KPI Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="dark-card p-5 space-y-2 border-[#272B36]">
+              <span className="text-xs font-semibold text-gray-400">Quality Score</span>
+              <div className="text-2xl font-extrabold text-[#F5A623]">{qualityData.overall_quality_score.toFixed(1)}/100</div>
+              <div className="pt-0.5">
+                <StatusBadge status={qualityData.quality_status} size="sm" />
+              </div>
+            </div>
+
+            <div className="dark-card p-5 space-y-2 border-[#272B36]">
+              <span className="text-xs font-semibold text-gray-400">Audited Records</span>
+              <div className="text-2xl font-extrabold text-white">{qualityData.total_records}</div>
+              <span className="text-[10px] text-gray-500">Database Population</span>
+            </div>
+
+            <div className="dark-card p-5 space-y-2 border-[#272B36]">
+              <span className="text-xs font-semibold text-gray-400">Valid Records</span>
+              <div className="text-2xl font-extrabold text-emerald-400">{qualityData.valid_records}</div>
+              <span className="text-[10px] text-gray-500">Ready for ML Inference</span>
+            </div>
+
+            <div className="dark-card p-5 space-y-2 border-[#272B36]">
+              <span className="text-xs font-semibold text-gray-400">Invalid Records</span>
+              <div className={`text-2xl font-extrabold ${qualityData.invalid_records > 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                {qualityData.invalid_records}
+              </div>
+              <span className="text-[10px] text-gray-500">Critical Validation Errors</span>
+            </div>
+
+            <div className="dark-card p-5 space-y-2 border-[#272B36]">
+              <span className="text-xs font-semibold text-gray-400">Duplicate IDs</span>
+              <div className="text-2xl font-extrabold text-white">{qualityData.duplicate_count}</div>
+              <span className="text-[10px] text-gray-500">Primary Key Duplication</span>
+            </div>
+          </div>
+
+          {/* Quality Alerts Banner */}
+          <div className="dark-card p-6 border-[#F5A623]/30 bg-[#151821] space-y-3">
+            <div className="flex items-center space-x-2">
+              <FileCheck className="w-5 h-5 text-emerald-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Data Quality Diagnostic Summary</h3>
+            </div>
+            {qualityData.alerts.map((al, idx) => (
+              <p key={idx} className="text-xs text-gray-300 font-medium">
+                {al.message}
+              </p>
+            ))}
+            <div className="text-[11px] text-gray-500 pt-2 border-t border-[#272B36] flex items-center justify-between">
+              <span>Audited Database: <strong className="font-mono text-gray-300">telecom_churn.db</strong></span>
+              <span>{new Date(qualityData.timestamp).toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* Field-level Data Quality Diagnostic Table */}
+          <div className="dark-card p-6 space-y-4">
+            <div>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">Field-Level Data Quality Diagnostics</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Pre-inference schema and range integrity checks across features.</p>
+            </div>
+
+            {qualityData.field_issues.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#1A1D24] text-gray-400 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3">Feature Field</th>
+                      <th className="p-3">Issue Type</th>
+                      <th className="p-3">Severity</th>
+                      <th className="p-3">Affected Records</th>
+                      <th className="p-3">Diagnostic Message</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#272B36]">
+                    {qualityData.field_issues.map((iss) => (
+                      <tr key={iss.field} className="hover:bg-[#1A1D24]/50 transition">
+                        <td className="p-3 font-mono font-bold text-white">{iss.field}</td>
+                        <td className="p-3 text-gray-300 capitalize">{iss.issue_type.replace(/_/g, ' ')}</td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              iss.severity === 'CRITICAL'
+                                ? 'bg-red-950 text-red-400 border border-red-500/40'
+                                : iss.severity === 'ERROR'
+                                ? 'bg-orange-950 text-orange-400 border border-orange-500/40'
+                                : 'bg-amber-950 text-amber-400 border border-amber-500/40'
+                            }`}
+                          >
+                            {iss.severity}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono font-bold text-white">{iss.affected_count}</td>
+                        <td className="p-3 text-gray-400">{iss.sample_message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-emerald-400 text-xs flex flex-col items-center justify-center space-y-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                <span className="font-semibold text-sm">100% Clean Data — No field-level anomalies or type violations detected.</span>
+              </div>
+            )}
           </div>
         </div>
       )}
