@@ -1,4 +1,4 @@
-"""Backend Configuration Settings and Environment Settings (TASK 10 Hardened)."""
+"""Backend Configuration Settings and Environment Settings (TASK 10 Hardened, TASK 12 Observability)."""
 
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,6 +22,20 @@ class Settings(BaseSettings):
     DATA_DIR: Path = BASE_DIR / "data"
     DB_PATH: Path = DATA_DIR / "database" / "telecom_churn.db"
     DATABASE_URL: str = f"sqlite:///{DB_PATH}"
+
+    # ── Observability (TASK 12) ──────────────────────────────────────────────
+    # LOG_LEVEL: Python logging level name (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    LOG_LEVEL: str = "INFO"
+    # LOG_FORMAT: "json" for production structured logs, "text" for human-readable dev output
+    LOG_FORMAT: str = "json"
+    # ENABLE_AUDIT_LOGGING: write business-event audit records to SQLite audit_logs table
+    ENABLE_AUDIT_LOGGING: bool = True
+    # ENABLE_METRICS: collect in-memory operational metrics exposed at /api/v1/metrics
+    ENABLE_METRICS: bool = True
+    # AUDIT_RETENTION_DAYS: purge audit records older than N days (0 = no automatic purge)
+    AUDIT_RETENTION_DAYS: int = 90
+    # REQUEST_ID_HEADER: primary header name used to propagate correlation IDs
+    REQUEST_ID_HEADER: str = "X-Request-ID"
 
     @property
     def cors_origins(self) -> list[str]:

@@ -86,6 +86,9 @@ def trigger_monitoring_run(
         action="MONITORING_RUN",
         target_resource=f"model:{active_m.get('version', 'v1788203728')}",
         details=f"Executed data drift scan: Status {result['status']}, Score {result['overall_score']}",
+        model_version=active_m.get('version', 'v1788203728'),
+        event_type="MONITORING_RUN",
+        status="SUCCESS",
     )
     return {"status": "SUCCESS", "run": result}
 
@@ -124,6 +127,9 @@ def trigger_performance_run(
         action="PERFORMANCE_EVALUATION",
         target_resource=f"model:{result.get('model_version', 'v1788203728')}",
         details=f"Executed performance evaluation: Status {result['status']}",
+        model_version=result.get('model_version', 'v1788203728'),
+        event_type="PERFORMANCE_EVALUATION",
+        status="SUCCESS",
     )
     return {"status": "SUCCESS", "run": result}
 
@@ -203,6 +209,9 @@ def promote_model_version(
             action="MODEL_PROMOTION",
             target_resource=f"model:{version}",
             details=f"Promoted model {version} ({promoted_info['model_name']})",
+            model_version=version,
+            event_type="MODEL_PROMOTION",
+            status="SUCCESS",
         )
         return {"status": "SUCCESS", "promoted": promoted_info}
     except Exception as e:

@@ -9,8 +9,12 @@ import {
   runPerformanceScan,
   getDataQualityReport,
   getModelMetrics,
+  getOperationalMetrics,
+  getAuditEvents,
   FeatureDriftDetail,
+  AuditEvent,
 } from '../api/monitoring';
+import { getActiveModelInfo } from '../api/monitoring';
 import { StatusBadge } from '../components/common/StatusBadge';
 import {
   Activity,
@@ -31,6 +35,11 @@ import {
   AlertCircle,
   TrendingDown,
   TrendingUp,
+  Eye,
+  Filter,
+  Cpu,
+  Zap,
+  Server,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -39,8 +48,10 @@ interface ModelMonitoringProps {
 }
 
 export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole }) => {
-  const [activeTab, setActiveTab] = useState<'performance' | 'drift' | 'quality'>('performance');
+  const [activeTab, setActiveTab] = useState<'performance' | 'drift' | 'quality' | 'operations'>('performance');
   const [selectedFeature, setSelectedFeature] = useState<FeatureDriftDetail | null>(null);
+  const [auditEventTypeFilter, setAuditEventTypeFilter] = useState<string>('');
+  const [auditStatusFilter, setAuditStatusFilter] = useState<string>('');
 
   // Task 9 Performance Monitoring Queries
   const { data: perfData, isLoading: loadingPerf, refetch: refetchPerf } = useQuery({
@@ -89,6 +100,29 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
   const { data: metricsData } = useQuery({
     queryKey: ['model-metrics'],
     queryFn: getModelMetrics,
+  });
+
+  // Task 12 Observability Queries (lazy — only loaded when tab is active)
+  const { data: opsMetrics, isLoading: loadingOps, refetch: refetchOps } = useQuery({
+    queryKey: ['operational-metrics'],
+    queryFn: getOperationalMetrics,
+    enabled: activeTab === 'operations',
+    refetchInterval: activeTab === 'operations' ? 15000 : false,
+  });
+
+  const { data: auditData, isLoading: loadingAudit, refetch: refetchAudit } = useQuery({
+    queryKey: ['audit-events', auditEventTypeFilter, auditStatusFilter],
+    queryFn: () => getAuditEvents({
+      limit: 50,
+      event_type: auditEventTypeFilter || undefined,
+      status: auditStatusFilter || undefined,
+    }),
+    enabled: activeTab === 'operations',
+  });
+
+  const { data: activeModelData } = useQuery({
+    queryKey: ['active-model-info'],
+    queryFn: getActiveModelInfo,
   });
 
   if (loadingPerf || loadingDrift || loadingQuality || !perfData || !driftData || !qualityData) {
@@ -149,6 +183,14 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
             >
               Data Quality & Validation
             </button>
+            <button
+              onClick={() => setActiveTab('operations')}
+              className={`px-4 py-2 rounded-lg transition ${
+                activeTab === 'operations' ? 'bg-[#F5A623] text-black font-bold shadow' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Operations
+            </button>
           </div>
 
           {canTrigger && (
@@ -156,7 +198,8 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
               onClick={() => {
                 if (activeTab === 'performance') perfMutation.mutate();
                 else if (activeTab === 'drift') driftMutation.mutate();
-                else refetchQuality();
+                else if (activeTab === 'quality') refetchQuality();
+                else if (activeTab === 'operations') { refetchOps(); refetchAudit(); }
               }}
               disabled={perfMutation.isPending || driftMutation.isPending}
               className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center space-x-2 shadow-lg shadow-emerald-600/20 transition disabled:opacity-50"
@@ -171,7 +214,9 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
                   ? 'Run Performance Evaluation'
                   : activeTab === 'drift'
                   ? 'Run Drift Scan'
-                  : 'Re-audit Data Quality'}
+                  : activeTab === 'quality'
+                  ? 'Re-audit Data Quality'
+                  : 'Refresh Metrics'}
               </span>
             </button>
           )}
@@ -585,6 +630,214 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
               <div className="p-8 text-center text-emerald-400 text-xs flex flex-col items-center justify-center space-y-2">
                 <CheckCircle2 className="w-8 h-8 text-emerald-400" />
                 <span className="font-semibold text-sm">100% Clean Data — No field-level anomalies or type violations detected.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: OPERATIONS / OBSERVABILITY (TASK 12) */}
+      {activeTab === 'operations' && (
+        <div className="space-y-8">
+          {/* Loading state */}
+          {loadingOps && (
+            <div className="p-12 text-center text-gray-400 flex flex-col items-center space-y-3">
+              <RefreshCw className="w-7 h-7 text-[#F5A623] animate-spin" />
+              <span className="text-sm">Loading operational metrics...</span>
+            </div>
+          )}
+
+          {opsMetrics && (
+            <>
+              {/* API HEALTH PANEL */}
+              <div className="dark-card p-6 space-y-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center space-x-2">
+                  <Server className="w-4 h-4 text-emerald-400" />
+                  <span>API Health</span>
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Service Status</span>
+                    <div className="flex items-center space-x-2 pt-1">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span className="text-sm font-bold text-emerald-400">{opsMetrics.status.toUpperCase()}</span>
+                    </div>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Version</span>
+                    <p className="text-sm font-bold text-white font-mono pt-1">{opsMetrics.version}</p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Environment</span>
+                    <p className="text-sm font-bold text-[#F5A623] pt-1 capitalize">{opsMetrics.environment}</p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Uptime</span>
+                    <p className="text-sm font-bold text-white pt-1">
+                      {Math.floor(opsMetrics.metrics.uptime_seconds / 3600)}h {Math.floor((opsMetrics.metrics.uptime_seconds % 3600) / 60)}m
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* PERFORMANCE KPIs */}
+              <div className="dark-card p-6 space-y-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center space-x-2">
+                  <Zap className="w-4 h-4 text-[#F5A623]" />
+                  <span>API Performance</span>
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Total Requests</span>
+                    <p className="text-2xl font-extrabold text-white">{opsMetrics.metrics.api.requests_total.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">API Errors</span>
+                    <p className="text-2xl font-extrabold text-red-400">{opsMetrics.metrics.api.errors_total}</p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Error Rate</span>
+                    <p className="text-2xl font-extrabold text-amber-400">{(opsMetrics.metrics.api.error_rate * 100).toFixed(1)}%</p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Avg Latency</span>
+                    <p className="text-2xl font-extrabold text-white">{opsMetrics.metrics.api.latency.avg_ms.toFixed(0)}<span className="text-xs text-gray-400">ms</span></p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Predictions</span>
+                    <p className="text-2xl font-extrabold text-emerald-400">{opsMetrics.metrics.predictions.requests_total}</p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Pred Latency</span>
+                    <p className="text-2xl font-extrabold text-white">{opsMetrics.metrics.predictions.latency.avg_ms.toFixed(0)}<span className="text-xs text-gray-400">ms</span></p>
+                  </div>
+                </div>
+              </div>
+
+              {/* MODEL OPERATIONS SUMMARY */}
+              <div className="dark-card p-6 space-y-4">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center space-x-2">
+                  <Cpu className="w-4 h-4 text-violet-400" />
+                  <span>Model Operations</span>
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Active Model</span>
+                    <p className="text-sm font-bold text-white truncate pt-1">
+                      {activeModelData?.model_name ?? '—'}
+                    </p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Model Version</span>
+                    <p className="text-sm font-mono font-bold text-[#F5A623] pt-1">
+                      {activeModelData?.model_version ?? '—'}
+                    </p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">DQ Failures</span>
+                    <p className="text-2xl font-extrabold text-red-400">{opsMetrics.metrics.data_quality.failures_total}</p>
+                  </div>
+                  <div className="bg-[#1A1D24] p-4 rounded-xl border border-[#272B36] space-y-1">
+                    <span className="text-[10px] text-gray-400 font-semibold">Drift Alerts</span>
+                    <p className="text-2xl font-extrabold text-amber-400">{opsMetrics.metrics.monitoring.drift_alerts_total}</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* AUDIT EVENTS TABLE */}
+          <div className="dark-card p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center space-x-2">
+                <Eye className="w-4 h-4 text-blue-400" />
+                <span>Audit Events</span>
+              </h3>
+              {/* Filters */}
+              <div className="flex items-center space-x-2">
+                <Filter className="w-3.5 h-3.5 text-gray-500" />
+                <select
+                  id="audit-event-type-filter"
+                  value={auditEventTypeFilter}
+                  onChange={e => setAuditEventTypeFilter(e.target.value)}
+                  className="text-xs bg-[#1A1D24] border border-[#272B36] text-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#F5A623]"
+                >
+                  <option value="">All Event Types</option>
+                  <option value="PREDICTION_COMPLETED">Prediction Completed</option>
+                  <option value="PREDICTION_REJECTED_DATA_QUALITY">Prediction Rejected (DQ)</option>
+                  <option value="MONITORING_RUN">Monitoring Run</option>
+                  <option value="PERFORMANCE_EVALUATION">Performance Evaluation</option>
+                  <option value="MODEL_PROMOTION">Model Promotion</option>
+                  <option value="SCORING_JOB_TRIGGERED">Scoring Job</option>
+                  <option value="DRIFT_ALERT_TRIGGERED">Drift Alert</option>
+                </select>
+                <select
+                  id="audit-status-filter"
+                  value={auditStatusFilter}
+                  onChange={e => setAuditStatusFilter(e.target.value)}
+                  className="text-xs bg-[#1A1D24] border border-[#272B36] text-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#F5A623]"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="SUCCESS">SUCCESS</option>
+                  <option value="FAILURE">FAILURE</option>
+                  <option value="WARNING">WARNING</option>
+                </select>
+                <button
+                  onClick={() => refetchAudit()}
+                  className="p-1.5 rounded-lg bg-[#1A1D24] border border-[#272B36] text-gray-400 hover:text-white transition"
+                  title="Refresh audit events"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {loadingAudit ? (
+              <div className="py-8 text-center text-gray-500 text-xs">Loading audit events...</div>
+            ) : !auditData || auditData.events.length === 0 ? (
+              <div className="py-8 text-center text-gray-500 text-xs">No audit events found for the selected filters.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-[#272B36] text-gray-500 text-left">
+                      <th className="pb-2 pr-4 font-semibold">Timestamp</th>
+                      <th className="pb-2 pr-4 font-semibold">Event Type</th>
+                      <th className="pb-2 pr-4 font-semibold">Status</th>
+                      <th className="pb-2 pr-4 font-semibold">Model Version</th>
+                      <th className="pb-2 pr-4 font-semibold">Actor</th>
+                      <th className="pb-2 font-semibold">Request ID</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1A1D24]">
+                    {auditData.events.map((ev: AuditEvent) => (
+                      <tr key={ev.id} className="hover:bg-[#1A1D24] transition group">
+                        <td className="py-2 pr-4 text-gray-400 font-mono whitespace-nowrap">
+                          {new Date(ev.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' })}
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span className="font-semibold text-gray-200">{ev.event_type ?? ev.action}</span>
+                        </td>
+                        <td className="py-2 pr-4">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            ev.status === 'SUCCESS' ? 'bg-emerald-900/50 text-emerald-400'
+                            : ev.status === 'FAILURE' ? 'bg-red-900/50 text-red-400'
+                            : ev.status === 'WARNING' ? 'bg-amber-900/50 text-amber-400'
+                            : 'bg-gray-800 text-gray-400'
+                          }`}>
+                            {ev.status}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 font-mono text-[#F5A623]">{ev.model_version ?? '—'}</td>
+                        <td className="py-2 pr-4 text-gray-400">{ev.actor_email}</td>
+                        <td className="py-2 font-mono text-gray-600 text-[10px]">{ev.request_id ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-3 text-[10px] text-gray-600 text-right">
+                  Showing {auditData.events.length} of {auditData.total} events (newest first)
+                </p>
               </div>
             )}
           </div>

@@ -1,13 +1,15 @@
-"""Scoring Job Trigger, Real-time Prediction, and Persistent Prediction History Endpoints (TASK 6)."""
+"""Scoring Job Trigger, Real-time Prediction, and Persistent Prediction History Endpoints (TASK 6, TASK 12 Observability)."""
 
 from datetime import datetime, timezone
 import json
 import sqlite3
 import uuid
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Query, status
+import time
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Query, Request, status
 from business_engine.risk_scoring import calculate_risk_tier
 from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
+from backend.app.core.metrics import metrics_collector
 from backend.app.core.rbac import UserContext, require_roles
 from backend.app.schemas.scoring import (
     FeatureAttributionItem,
@@ -62,10 +64,12 @@ def _ensure_scores_seeded():
         run_full_scoring_job(force_ingestion=True)
 
 
-def _compute_customer_prediction(customer_id: str) -> PredictResponse:
+def _compute_customer_prediction(customer_id: str, request_id: str | None = None) -> PredictResponse:
     """Look up customer score from database, generate real prediction, and persist inference record."""
     _ensure_scores_seeded()
     cid_clean = customer_id.strip()
+    _t0 = time.time()
+    metrics_collector.inc("prediction_requests_total")
 
     conn = sqlite3.connect(settings.DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -87,6 +91,18 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
     dq_res = dq_engine.validate_record(dict(row))
     if not dq_res["can_proceed_to_inference"]:
         conn.close()
+        metrics_collector.inc("data_quality_failures_total")
+        metrics_collector.inc("prediction_errors_total")
+        log_audit_event(
+            actor_email="system",
+            actor_role="system",
+            action="PREDICTION_REJECTED_DATA_QUALITY",
+            target_resource=f"customer:{cid_clean[:8]}",
+            details=f"Quality score {dq_res['quality_score']} status {dq_res['quality_status']}",
+            request_id=request_id,
+            event_type="PREDICTION_REJECTED_DATA_QUALITY",
+            status="FAILURE",
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -95,6 +111,7 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
                 "quality_score": dq_res["quality_score"],
                 "quality_status": dq_res["quality_status"],
                 "issues": dq_res["issues"],
+                "request_id": request_id,
             },
         )
 
@@ -162,6 +179,23 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
     conn.commit()
     conn.close()
 
+    # Record prediction latency
+    pred_latency_ms = round((time.time() - _t0) * 1000, 2)
+    metrics_collector.observe("prediction_latency_ms", pred_latency_ms)
+
+    # Audit — use truncated ID prefix, never log raw customer PII
+    log_audit_event(
+        actor_email="system",
+        actor_role="system",
+        action="PREDICTION_COMPLETED",
+        target_resource=f"customer:{cid_clean[:8]}",
+        details=f"risk_tier={risk_tier} prob={round(prob, 3)} model={active_model_version} latency_ms={pred_latency_ms}",
+        request_id=request_id,
+        model_version=active_model_version,
+        event_type="PREDICTION_COMPLETED",
+        status="SUCCESS",
+    )
+
     return PredictResponse(
         prediction_id=pred_id,
         customer_id=row["customer_id"],
@@ -179,19 +213,23 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
 @router.post("/predict", response_model=PredictResponse)
 def predict_customer_churn_post(
     payload: PredictRequest,
+    request: Request,
     current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
 ):
     """Real-time churn prediction endpoint for a specific subscriber."""
-    return _compute_customer_prediction(payload.customer_id)
+    req_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
+    return _compute_customer_prediction(payload.customer_id, request_id=req_id)
 
 
 @router.get("/predict/{customer_id}", response_model=PredictResponse)
 def predict_customer_churn_get(
     customer_id: str,
+    request: Request,
     current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "Executive"])),
 ):
     """GET endpoint for customer-specific real-time churn prediction."""
-    return _compute_customer_prediction(customer_id)
+    req_id = request.headers.get("X-Request-ID") or request.headers.get("X-Correlation-ID")
+    return _compute_customer_prediction(customer_id, request_id=req_id)
 
 
 @router.get("/predictions/history", response_model=PredictionHistoryPaginatedResponse)
@@ -394,6 +432,8 @@ def trigger_scoring_job(
         action="TRIGGER_SCORING_JOB",
         target_resource=f"job:{job_id}",
         details=f"Job type: {payload.job_type}, Force Ingestion: {payload.force_ingestion}",
+        event_type="SCORING_JOB_TRIGGERED",
+        status="SUCCESS",
     )
 
     return ScoringJobResponse(**JOB_STATE[job_id])

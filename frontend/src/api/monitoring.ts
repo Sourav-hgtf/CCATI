@@ -250,3 +250,98 @@ export const promoteCandidateModel = async (version: string): Promise<{ status: 
     method: 'POST',
   });
 };
+
+// ── Observability / Operational Metrics (TASK 12) ───────────────────────────
+
+export interface LatencyStats {
+  avg_ms: number;
+  min_ms: number;
+  max_ms: number;
+  count: number;
+}
+
+export interface OperationalMetrics {
+  collected_at: string;
+  uptime_seconds: number;
+  api: {
+    requests_total: number;
+    errors_total: number;
+    error_rate: number;
+    latency: LatencyStats;
+  };
+  predictions: {
+    requests_total: number;
+    errors_total: number;
+    latency: LatencyStats;
+  };
+  data_quality: {
+    failures_total: number;
+  };
+  model: {
+    load_total: number;
+    integrity_failures_total: number;
+  };
+  monitoring: {
+    drift_alerts_total: number;
+  };
+  endpoints: Record<string, { total: number; errors: number }>;
+}
+
+export interface OperationalMetricsResponse {
+  status: string;
+  service: string;
+  version: string;
+  environment: string;
+  metrics: OperationalMetrics;
+}
+
+export interface AuditEvent {
+  id: number;
+  timestamp: string;
+  actor_email: string;
+  actor_role: string;
+  action: string;
+  target_resource: string;
+  details: string | null;
+  request_id: string | null;
+  model_version: string | null;
+  event_type: string | null;
+  status: string;
+}
+
+export interface AuditEventsResponse {
+  total: number;
+  limit: number;
+  filters: {
+    event_type: string | null;
+    status: string | null;
+    model_version: string | null;
+    since: string | null;
+    until: string | null;
+  };
+  events: AuditEvent[];
+}
+
+export const getOperationalMetrics = async (): Promise<OperationalMetricsResponse> => {
+  return fetchApi<OperationalMetricsResponse>(`/metrics`);
+};
+
+export const getAuditEvents = async (params?: {
+  limit?: number;
+  event_type?: string;
+  status?: string;
+  model_version?: string;
+  since?: string;
+  until?: string;
+}): Promise<AuditEventsResponse> => {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.event_type) query.set('event_type', params.event_type);
+  if (params?.status) query.set('status', params.status);
+  if (params?.model_version) query.set('model_version', params.model_version);
+  if (params?.since) query.set('since', params.since);
+  if (params?.until) query.set('until', params.until);
+  const qs = query.toString() ? `?${query.toString()}` : '';
+  return fetchApi<AuditEventsResponse>(`/audit/events${qs}`);
+};
+

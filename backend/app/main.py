@@ -1,7 +1,5 @@
-"""FastAPI Application Entry Point (TASK 10 Production Hardened)."""
+"""FastAPI Application Entry Point (TASK 10 Production Hardened, TASK 12 Observability)."""
 
-import json
-import logging
 import time
 import uuid
 from fastapi import FastAPI, Request, status
@@ -9,12 +7,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from backend.app.api.v1 import admin, analytics, auth, customers, data_quality, export, health, models, scoring, segments
+from backend.app.api.v1 import (
+    admin, analytics, auth, customers, data_quality,
+    export, health, models, observability, scoring, segments,
+)
 from backend.app.core.config import settings
+from backend.app.core.logger import get_logger
+from backend.app.core.metrics import metrics_collector
 
-# Configure structured logging
-logger = logging.getLogger("telecom_churn_backend")
-logger.setLevel(logging.INFO if not settings.DEBUG else logging.DEBUG)
+# Structured logger for the application entry point
+logger = get_logger("telecom_churn.main")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -37,8 +39,12 @@ app.add_middleware(
 
 @app.middleware("http")
 async def security_and_observability_middleware(request: Request, call_next):
-    """Production Security Headers & Request Correlation Tracking Middleware."""
-    correlation_id = request.headers.get("X-Correlation-ID") or request.headers.get("X-Request-ID") or f"req-{uuid.uuid4().hex[:12]}"
+    """Production Security Headers, Request Correlation & Metrics Tracking Middleware (TASK 10/12)."""
+    correlation_id = (
+        request.headers.get(settings.REQUEST_ID_HEADER)
+        or request.headers.get("X-Correlation-ID")
+        or f"req-{uuid.uuid4().hex[:12]}"
+    )
     start_time = time.time()
 
     # Payload size protection
@@ -58,6 +64,15 @@ async def security_and_observability_middleware(request: Request, call_next):
     response = await call_next(request)
 
     duration_ms = round((time.time() - start_time) * 1000, 2)
+    is_error = response.status_code >= 400
+
+    # ── Operational Metrics (TASK 12) ────────────────────────────────────────
+    if settings.ENABLE_METRICS:
+        metrics_collector.inc("api_requests_total")
+        metrics_collector.observe("api_latency_ms", duration_ms)
+        metrics_collector.inc_endpoint(request.url.path, is_error=is_error)
+        if is_error:
+            metrics_collector.inc("api_errors_total")
 
     # Correlation and Timing Headers
     response.headers["X-Correlation-ID"] = correlation_id
@@ -71,15 +86,17 @@ async def security_and_observability_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=(), payment=()"
 
-    # Log access securely without leaking PII or secrets
-    log_entry = {
-        "correlation_id": correlation_id,
-        "method": request.method,
-        "path": request.url.path,
-        "status_code": response.status_code,
-        "duration_ms": duration_ms,
-    }
-    logger.info(json.dumps(log_entry))
+    # Structured access log — no PII, no secrets
+    logger.info(
+        "request_handled",
+        extra={
+            "request_id": correlation_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        },
+    )
 
     return response
 
@@ -87,7 +104,7 @@ async def security_and_observability_middleware(request: Request, call_next):
 # Standardized Exception Handlers (no internal stack traces exposed to client)
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    correlation_id = request.headers.get("X-Correlation-ID", f"err-{uuid.uuid4().hex[:8]}")
+    correlation_id = request.headers.get(settings.REQUEST_ID_HEADER, f"err-{uuid.uuid4().hex[:8]}")
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -103,7 +120,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    correlation_id = request.headers.get("X-Correlation-ID", f"val-{uuid.uuid4().hex[:8]}")
+    correlation_id = request.headers.get(settings.REQUEST_ID_HEADER, f"val-{uuid.uuid4().hex[:8]}")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
@@ -119,14 +136,22 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    correlation_id = request.headers.get("X-Correlation-ID", f"exc-{uuid.uuid4().hex[:8]}")
-    logger.error(f"[Unhandled Exception] ID: {correlation_id} - Path: {request.url.path} - Error: {str(exc)}", exc_info=True)
+    correlation_id = request.headers.get(settings.REQUEST_ID_HEADER, f"exc-{uuid.uuid4().hex[:8]}")
+    logger.error(
+        "unhandled_exception",
+        extra={
+            "request_id": correlation_id,
+            "path": request.url.path,
+            "error_type": type(exc).__name__,
+        },
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "detail": "An internal server error occurred.",
             "error": {
-                "code": "INTERNAL_SERVER_ERROR",
+                "code": "INTERNAL_ERROR",
                 "message": "An unexpected error occurred. Please reference the request ID when reporting this issue.",
                 "request_id": correlation_id,
             },
@@ -146,6 +171,7 @@ app.include_router(data_quality.router, prefix=settings.API_V1_STR, tags=["Data 
 app.include_router(scoring.router, prefix=settings.API_V1_STR, tags=["Scoring Jobs"])
 app.include_router(export.router, prefix=settings.API_V1_STR, tags=["Data Export"])
 app.include_router(admin.router, prefix=settings.API_V1_STR, tags=["Admin"])
+app.include_router(observability.router, prefix=settings.API_V1_STR, tags=["Observability"])
 
 
 @app.get("/")
