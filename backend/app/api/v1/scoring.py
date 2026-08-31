@@ -5,6 +5,7 @@ import json
 import sqlite3
 import uuid
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, status
+from business_engine.risk_scoring import calculate_risk_tier
 from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
 from backend.app.core.rbac import UserContext, require_roles
@@ -53,16 +54,7 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
 
     if row:
         prob = float(row["churn_probability"])
-
-        # Risk tier calculation using centralized thresholds
-        if prob >= 0.75:
-            risk_tier = "Critical"
-        elif prob >= 0.50:
-            risk_tier = "High"
-        elif prob >= 0.25:
-            risk_tier = "Medium"
-        else:
-            risk_tier = "Low"
+        risk_tier = calculate_risk_tier(prob)
 
         # Parse SHAP top features
         raw_shap = json.loads(row["shap_json"]) if row["shap_json"] else []
@@ -98,15 +90,7 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
     # Fallback for unknown customer IDs: compute deterministic prediction from customer_id hash
     hash_val = sum(ord(c) for c in cid_clean) % 100
     prob = round(hash_val / 100.0, 4)
-
-    if prob >= 0.75:
-        risk_tier = "Critical"
-    elif prob >= 0.50:
-        risk_tier = "High"
-    elif prob >= 0.25:
-        risk_tier = "Medium"
-    else:
-        risk_tier = "Low"
+    risk_tier = calculate_risk_tier(prob)
 
     is_high = prob >= 0.50
     fallback_features = [

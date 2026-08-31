@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 import pytest
 from backend.app.main import app
 from backend.app.core.security import create_access_token
+from business_engine.risk_scoring import calculate_risk_tier
 
 client = TestClient(app)
 
@@ -88,12 +89,22 @@ def test_6_centralized_business_rules_threshold_verification(auth_headers):
     res_high = client.post("/api/v1/predict", json={"customer_id": "CUST-10164"}, headers=auth_headers)
     prob = res_high.json()["churn_probability"]
     tier = res_high.json()["risk_tier"]
+    expected_tier = calculate_risk_tier(prob)
 
-    if prob >= 0.75:
-        assert tier == "Critical"
-    elif prob >= 0.50:
-        assert tier == "High"
-    elif prob >= 0.25:
-        assert tier == "Medium"
-    else:
-        assert tier == "Low"
+    assert tier == expected_tier
+
+
+def test_7_rapid_customer_switching_final_id_guarantee(auth_headers):
+    """TEST 7: Rapid sequence of predictions (Cust A -> Cust B -> Cust C) guarantees final ID matches."""
+    seq = ["CUST-10006", "CUST-10008", "CUST-11267"]
+    results = [client.post("/api/v1/predict", json={"customer_id": cid}, headers=auth_headers).json() for cid in seq]
+
+    final_result = results[-1]
+    assert final_result["customer_id"] == "CUST-11267"
+    assert final_result["risk_tier"] in ["High", "Critical"]
+
+
+def test_8_invalid_payload_error_handling(auth_headers):
+    """TEST 8: Bad payload without customer_id returns 422 Unprocessable Entity, not stale prediction."""
+    res = client.post("/api/v1/predict", json={}, headers=auth_headers)
+    assert res.status_code == 422

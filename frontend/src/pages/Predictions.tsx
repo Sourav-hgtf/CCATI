@@ -2,17 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { predictCustomerChurn, ChurnPredictionResult } from '../api/predictions';
 import { StatusBadge } from '../components/common/StatusBadge';
-import { Search, BrainCircuit, Sparkles, CheckCircle2, TrendingUp, TrendingDown, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react';
+import { Search, BrainCircuit, Sparkles, CheckCircle2, TrendingUp, TrendingDown, ArrowRight, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const Predictions: React.FC = () => {
   const navigate = useNavigate();
   const [selectedCustomerId, setSelectedCustomerId] = useState('CUST-10000');
+  const [activeSearchId, setActiveSearchId] = useState('CUST-10000');
   const [result, setResult] = useState<ChurnPredictionResult | null>(null);
 
   const mutation = useMutation({
     mutationFn: (id: string) => predictCustomerChurn(id),
-    onSuccess: (data) => setResult(data),
+    onSuccess: (data, variables) => {
+      // Defensive Validation: Only set result if returned payload customer_id matches active request ID
+      if (data && data.customer_id.toLowerCase() === variables.toLowerCase()) {
+        setResult(data);
+      }
+    },
+    onError: () => {
+      setResult(null); // Clear stale state on API failure
+    },
   });
 
   // Run initial prediction on mount
@@ -24,14 +33,16 @@ export const Predictions: React.FC = () => {
     if (e) e.preventDefault();
     const cleanId = selectedCustomerId.trim();
     if (cleanId) {
-      setResult(null); // Clear stale result while recomputing
+      setActiveSearchId(cleanId);
+      setResult(null); // PHASE 4: Immediately invalidate previous prediction state
       mutation.mutate(cleanId);
     }
   };
 
   const handleSelectQuickCustomer = (id: string) => {
     setSelectedCustomerId(id);
-    setResult(null); // Clear stale result while recomputing
+    setActiveSearchId(id);
+    setResult(null); // PHASE 4: Immediately invalidate previous prediction state
     mutation.mutate(id);
   };
 
@@ -41,6 +52,8 @@ export const Predictions: React.FC = () => {
     if (prob >= 0.25) return '#f59e0b'; // Amber (Medium)
     return '#10b981';                   // Green (Low)
   };
+
+  const isMatchingCustomer = result && result.customer_id.toLowerCase() === activeSearchId.toLowerCase();
 
   return (
     <div className="p-8 space-y-8 max-w-6xl mx-auto">
@@ -118,16 +131,24 @@ export const Predictions: React.FC = () => {
         </div>
       </div>
 
-      {/* Loading Spinner */}
+      {/* Loading State */}
       {mutation.isPending && (
-        <div className="dark-card p-12 text-center text-gray-400 flex flex-col items-center justify-center space-y-3">
+        <div className="dark-card p-12 text-center text-gray-400 flex flex-col items-center justify-center space-y-3 border-[#272B36]">
           <RefreshCw className="w-6 h-6 text-[#F5A623] animate-spin" />
-          <span className="text-xs font-semibold">Computing inference prediction for {selectedCustomerId}...</span>
+          <span className="text-xs font-semibold">Computing inference prediction for subscriber <strong className="text-white font-mono">{activeSearchId}</strong>...</span>
         </div>
       )}
 
-      {/* Prediction Output Card */}
-      {result && !mutation.isPending && (
+      {/* Error State */}
+      {mutation.isError && !mutation.isPending && (
+        <div className="dark-card p-6 text-center text-red-400 flex flex-col items-center justify-center space-y-2 border-red-500/30 bg-red-950/20">
+          <AlertTriangle className="w-6 h-6 text-red-400" />
+          <span className="text-xs font-semibold">Unable to fetch prediction for {activeSearchId}. Please verify Customer ID and retry.</span>
+        </div>
+      )}
+
+      {/* Synchronized Prediction Output Card */}
+      {result && isMatchingCustomer && !mutation.isPending && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Probability Meter Card */}
