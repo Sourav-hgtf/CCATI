@@ -80,13 +80,23 @@ def _compute_customer_prediction(customer_id: str) -> PredictResponse:
     rec_data = json.loads(row["recommendation_json"]) if row["recommendation_json"] else {}
     rec_action = rec_data.get("action_name", "Standard Retention Engagement")
 
+    from ml_engine.registry.model_registry import ModelRegistry
+    registry = ModelRegistry()
+    try:
+        active_m_info = registry.get_active_model_info()
+        active_model_name = active_m_info.get("model_name", "Candidate_RandomForest")
+        active_model_version = active_m_info.get("version", "v1.0.0")
+    except Exception:
+        active_model_name = "Candidate_RandomForest"
+        active_model_version = "v1.0.0"
+
     return PredictResponse(
         customer_id=row["customer_id"],
         churn_probability=round(prob, 4),
         risk_tier=risk_tier,
         confidence_score=0.94,
-        model_name="Candidate_RandomForest",
-        model_version="v1788203728",
+        model_name=active_model_name,
+        model_version=active_model_version,
         prediction_timestamp=now_iso,
         top_features=top_features,
         recommended_action=rec_action,
