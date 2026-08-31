@@ -144,7 +144,13 @@ def get_customer_detail(
     call_logs = [dict(c) for c in call_rows]
     conn.close()
 
-    shap_features = json.loads(row["shap_json"]) if row["shap_json"] else []
+    raw_shap = json.loads(row["shap_json"]) if row["shap_json"] else []
+    if isinstance(raw_shap, dict):
+        shap_features = raw_shap.get("top_features", [])
+    elif isinstance(raw_shap, list):
+        shap_features = raw_shap
+    else:
+        shap_features = []
     rec_payload = json.loads(row["recommendation_json"]) if row["recommendation_json"] else {}
     rec_payload["actioned"] = bool(row["actioned"])
     rec_payload["actioned_at"] = row["actioned_at"]

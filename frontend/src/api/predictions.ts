@@ -2,9 +2,24 @@ import { fetchApi } from './client';
 
 export interface FeatureAttribution {
   feature_name: string;
+  display_name?: string;
   feature_value: string | number;
   contribution: number;
   impact: 'Increase' | 'Decrease';
+  direction?: 'INCREASES_CHURN' | 'DECREASES_CHURN';
+  effect?: string;
+  category?: string;
+  importance?: number;
+}
+
+export interface DetailedExplanation {
+  explanation_status: 'AVAILABLE' | 'UNAVAILABLE';
+  base_value: number;
+  top_positive_drivers: FeatureAttribution[];
+  top_negative_drivers: FeatureAttribution[];
+  all_drivers: FeatureAttribution[];
+  summary: string;
+  disclaimer: string;
 }
 
 export interface ChurnPredictionResult {
@@ -13,11 +28,15 @@ export interface ChurnPredictionResult {
   churn_probability: number;
   risk_tier: 'Low' | 'Medium' | 'High' | 'Critical';
   confidence_score: number;
+  threshold?: number;
+  decision?: string;
+  decision_reason?: string;
   model_name: string;
   model_version: string;
   prediction_timestamp: string;
   top_features: FeatureAttribution[];
   recommended_action?: string;
+  explanation?: DetailedExplanation;
 }
 
 export interface PredictionHistoryItem extends ChurnPredictionResult {
@@ -58,3 +77,4 @@ export const getCustomerPredictionHistory = async (
 ): Promise<PredictionHistoryItem[]> => {
   return fetchApi<PredictionHistoryItem[]>(`/customers/${encodeURIComponent(customerId)}/predictions`);
 };
+

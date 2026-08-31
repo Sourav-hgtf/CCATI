@@ -113,7 +113,7 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
             "cluster_id": int(row["cluster_id"]),
             "pca_x": float(row["pca_x"]),
             "pca_y": float(row["pca_y"]),
-            "shap_json": json.dumps(shap_results[i]["top_features"]),
+            "shap_json": json.dumps(shap_results[i]),
             "recommendation_json": json.dumps(rec),
             "actioned": False,
             "actioned_at": None,

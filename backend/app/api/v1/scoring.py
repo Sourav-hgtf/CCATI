@@ -12,6 +12,7 @@ from backend.app.core.config import settings
 from backend.app.core.metrics import metrics_collector
 from backend.app.core.rbac import UserContext, require_roles
 from backend.app.schemas.scoring import (
+    DetailedExplanation,
     FeatureAttributionItem,
     PredictRequest,
     PredictResponse,
@@ -62,6 +63,79 @@ def _ensure_scores_seeded():
     if not scores_exists:
         print("Scoring database missing. Running initial batch scoring...")
         run_full_scoring_job(force_ingestion=True)
+
+
+
+def _parse_explanation_from_json(raw_json_str: str | None) -> tuple[list[FeatureAttributionItem], DetailedExplanation]:
+    """Safely parse SHAP / explanation data from stored json string."""
+    if not raw_json_str:
+        return [], DetailedExplanation(explanation_status="UNAVAILABLE", summary="No explanation data available.")
+    try:
+        data = json.loads(raw_json_str)
+        if isinstance(data, dict):
+            status_val = data.get("explanation_status", "AVAILABLE")
+            base_val = float(data.get("base_value", 0.50))
+            summary_val = data.get("summary", "")
+            disclaimer_val = data.get("disclaimer", "Feature contribution explains the model's prediction; it does not prove causation.")
+
+            top_feats = [FeatureAttributionItem(**f) for f in data.get("top_features", [])]
+            top_pos = [FeatureAttributionItem(**f) for f in data.get("top_positive_drivers", [])]
+            top_neg = [FeatureAttributionItem(**f) for f in data.get("top_negative_drivers", [])]
+            all_d = [FeatureAttributionItem(**f) for f in data.get("all_drivers", [])]
+
+            if not top_pos and top_feats:
+                top_pos = [f for f in top_feats if f.contribution > 0]
+            if not top_neg and top_feats:
+                top_neg = [f for f in top_feats if f.contribution < 0]
+
+            explanation_obj = DetailedExplanation(
+                explanation_status=status_val,
+                base_value=base_val,
+                top_positive_drivers=top_pos,
+                top_negative_drivers=top_neg,
+                all_drivers=all_d if all_d else top_feats,
+                summary=summary_val,
+                disclaimer=disclaimer_val,
+            )
+            return top_feats, explanation_obj
+        elif isinstance(data, list):
+            top_feats = []
+            for feat in data:
+                val = feat.get("value", feat.get("feature_value", ""))
+                fname = feat.get("feature", feat.get("feature_name", "unknown"))
+                imp = float(feat.get("importance", feat.get("contribution", 0.0)))
+                impact_val = feat.get("impact", "Increase" if imp > 0 else "Decrease")
+                dir_val = feat.get("direction", "INCREASES_CHURN" if imp > 0 else "DECREASES_CHURN")
+                eff_val = feat.get("effect", "Increases churn risk" if imp > 0 else "Reduces churn risk")
+                disp_name = feat.get("display_name", fname.replace("_", " ").title())
+                top_feats.append(
+                    FeatureAttributionItem(
+                        feature_name=fname,
+                        display_name=disp_name,
+                        feature_value=str(val),
+                        contribution=round(imp, 4),
+                        impact=impact_val,
+                        direction=dir_val,
+                        effect=eff_val,
+                        category=feat.get("category", "General"),
+                    )
+                )
+            top_pos = [f for f in top_feats if f.contribution > 0]
+            top_neg = [f for f in top_feats if f.contribution < 0]
+            explanation_obj = DetailedExplanation(
+                explanation_status="AVAILABLE",
+                base_value=0.50,
+                top_positive_drivers=top_pos,
+                top_negative_drivers=top_neg,
+                all_drivers=top_feats,
+                summary=f"Identified {len(top_pos)} risk elevating and {len(top_neg)} protective factors.",
+                disclaimer="Feature contribution explains the model's prediction; it does not prove causation.",
+            )
+            return top_feats, explanation_obj
+    except Exception:
+        pass
+
+    return [], DetailedExplanation(explanation_status="UNAVAILABLE", summary="Explanation could not be processed.")
 
 
 def _compute_customer_prediction(customer_id: str, request_id: str | None = None) -> PredictResponse:
@@ -120,21 +194,31 @@ def _compute_customer_prediction(customer_id: str, request_id: str | None = None
     risk_tier = calculate_risk_tier(prob)
     confidence = round(max(prob, 1.0 - prob), 4)
     pred_binary = 1 if prob >= 0.50 else 0
+    threshold_val = 0.50
 
-    # Parse SHAP top features
-    raw_shap = json.loads(row["shap_json"]) if row["shap_json"] else []
-    top_features = []
-    for feat in raw_shap:
-        val = feat.get("value", feat.get("feature_value", ""))
-        impact_val = feat.get("impact", "Increase" if feat.get("importance", 0) > 0 else "Decrease")
-        top_features.append(
-            FeatureAttributionItem(
-                feature_name=feat.get("feature", feat.get("feature_name", "unknown")),
-                feature_value=str(val),
-                contribution=round(float(feat.get("importance", feat.get("contribution", 0.1))), 4),
-                impact=impact_val,
-            )
+    # Decision transparency
+    if prob >= threshold_val:
+        decision_str = "RETENTION_INTERVENTION_RECOMMENDED"
+        decision_reason_str = f"Predicted churn probability ({(prob * 100):.1f}%) exceeds the retention intervention threshold ({(threshold_val * 100):.1f}%)."
+    else:
+        decision_str = "STANDARD_MONITORING"
+        decision_reason_str = f"Predicted churn probability ({(prob * 100):.1f}%) is below the retention intervention threshold ({(threshold_val * 100):.1f}%)."
+
+    # Parse SHAP top features and detailed explanation
+    _t_expl0 = time.time()
+    try:
+        top_features, detailed_explanation = _parse_explanation_from_json(row["shap_json"])
+        metrics_collector.inc("explanations_generated_total")
+    except Exception:
+        top_features = []
+        detailed_explanation = DetailedExplanation(
+            explanation_status="UNAVAILABLE",
+            summary="Explanation could not be generated.",
         )
+        metrics_collector.inc("explanation_errors_total")
+
+    expl_latency_ms = round((time.time() - _t_expl0) * 1000, 2)
+    metrics_collector.observe("explanation_latency_ms", expl_latency_ms)
 
     # Recommendation name
     rec_data = json.loads(row["recommendation_json"]) if row["recommendation_json"] else {}
@@ -168,12 +252,12 @@ def _compute_customer_prediction(customer_id: str, request_id: str | None = None
             pred_binary,
             risk_tier,
             confidence,
-            0.50,
+            threshold_val,
             active_model_name,
             active_model_version,
             now_iso,
             rec_action,
-            json.dumps([f.model_dump() for f in top_features]),
+            json.dumps(detailed_explanation.model_dump()),
         ),
     )
     conn.commit()
@@ -189,7 +273,7 @@ def _compute_customer_prediction(customer_id: str, request_id: str | None = None
         actor_role="system",
         action="PREDICTION_COMPLETED",
         target_resource=f"customer:{cid_clean[:8]}",
-        details=f"risk_tier={risk_tier} prob={round(prob, 3)} model={active_model_version} latency_ms={pred_latency_ms}",
+        details=f"risk_tier={risk_tier} prob={round(prob, 3)} model={active_model_version} latency_ms={pred_latency_ms} explanation_status={detailed_explanation.explanation_status} num_drivers={len(detailed_explanation.top_positive_drivers) + len(detailed_explanation.top_negative_drivers)}",
         request_id=request_id,
         model_version=active_model_version,
         event_type="PREDICTION_COMPLETED",
@@ -202,11 +286,15 @@ def _compute_customer_prediction(customer_id: str, request_id: str | None = None
         churn_probability=round(prob, 4),
         risk_tier=risk_tier,
         confidence_score=confidence,
+        threshold=threshold_val,
+        decision=decision_str,
+        decision_reason=decision_reason_str,
         model_name=active_model_name,
         model_version=active_model_version,
         prediction_timestamp=now_iso,
         top_features=top_features,
         recommended_action=rec_action,
+        explanation=detailed_explanation,
     )
 
 
@@ -275,8 +363,11 @@ def get_prediction_history(
 
     items = []
     for r in rows:
-        raw_expl = json.loads(r["explanation_json"]) if r["explanation_json"] else []
-        top_feats = [FeatureAttributionItem(**f) for f in raw_expl]
+        top_feats, expl_obj = _parse_explanation_from_json(r["explanation_json"])
+        prob_val = float(r["churn_probability"])
+        thresh_val = float(r["threshold"]) if "threshold" in r.keys() and r["threshold"] is not None else 0.50
+        dec_str = "RETENTION_INTERVENTION_RECOMMENDED" if prob_val >= thresh_val else "STANDARD_MONITORING"
+        dec_reason = f"Predicted churn probability ({(prob_val * 100):.1f}%) {'exceeds' if prob_val >= thresh_val else 'is below'} the retention intervention threshold ({(thresh_val * 100):.1f}%)."
         items.append(
             PredictionHistoryItem(
                 prediction_id=r["prediction_id"],
@@ -285,12 +376,15 @@ def get_prediction_history(
                 prediction=r["prediction"],
                 risk_tier=r["risk_tier"],
                 confidence_score=r["confidence_score"],
-                threshold=r["threshold"],
+                threshold=thresh_val,
+                decision=dec_str,
+                decision_reason=dec_reason,
                 model_name=r["model_name"],
                 model_version=r["model_version"],
                 prediction_timestamp=r["prediction_timestamp"],
                 recommended_action=r["recommended_action"],
                 top_features=top_feats,
+                explanation=expl_obj,
             )
         )
 
@@ -326,8 +420,11 @@ def get_prediction_by_id(
             detail=f"Prediction history record '{prediction_id}' not found.",
         )
 
-    raw_expl = json.loads(r["explanation_json"]) if r["explanation_json"] else []
-    top_feats = [FeatureAttributionItem(**f) for f in raw_expl]
+    top_feats, expl_obj = _parse_explanation_from_json(r["explanation_json"])
+    prob_val = float(r["churn_probability"])
+    thresh_val = float(r["threshold"]) if "threshold" in r.keys() and r["threshold"] is not None else 0.50
+    dec_str = "RETENTION_INTERVENTION_RECOMMENDED" if prob_val >= thresh_val else "STANDARD_MONITORING"
+    dec_reason = f"Predicted churn probability ({(prob_val * 100):.1f}%) {'exceeds' if prob_val >= thresh_val else 'is below'} the retention intervention threshold ({(thresh_val * 100):.1f}%)."
 
     return PredictionHistoryItem(
         prediction_id=r["prediction_id"],
@@ -336,12 +433,15 @@ def get_prediction_by_id(
         prediction=r["prediction"],
         risk_tier=r["risk_tier"],
         confidence_score=r["confidence_score"],
-        threshold=r["threshold"],
+        threshold=thresh_val,
+        decision=dec_str,
+        decision_reason=dec_reason,
         model_name=r["model_name"],
         model_version=r["model_version"],
         prediction_timestamp=r["prediction_timestamp"],
         recommended_action=r["recommended_action"],
         top_features=top_feats,
+        explanation=expl_obj,
     )
 
 
@@ -367,8 +467,11 @@ def get_customer_prediction_history(
 
     items = []
     for r in rows:
-        raw_expl = json.loads(r["explanation_json"]) if r["explanation_json"] else []
-        top_feats = [FeatureAttributionItem(**f) for f in raw_expl]
+        top_feats, expl_obj = _parse_explanation_from_json(r["explanation_json"])
+        prob_val = float(r["churn_probability"])
+        thresh_val = float(r["threshold"]) if "threshold" in r.keys() and r["threshold"] is not None else 0.50
+        dec_str = "RETENTION_INTERVENTION_RECOMMENDED" if prob_val >= thresh_val else "STANDARD_MONITORING"
+        dec_reason = f"Predicted churn probability ({(prob_val * 100):.1f}%) {'exceeds' if prob_val >= thresh_val else 'is below'} the retention intervention threshold ({(thresh_val * 100):.1f}%)."
         items.append(
             PredictionHistoryItem(
                 prediction_id=r["prediction_id"],
@@ -377,12 +480,15 @@ def get_customer_prediction_history(
                 prediction=r["prediction"],
                 risk_tier=r["risk_tier"],
                 confidence_score=r["confidence_score"],
-                threshold=r["threshold"],
+                threshold=thresh_val,
+                decision=dec_str,
+                decision_reason=dec_reason,
                 model_name=r["model_name"],
                 model_version=r["model_version"],
                 prediction_timestamp=r["prediction_timestamp"],
                 recommended_action=r["recommended_action"],
                 top_features=top_feats,
+                explanation=expl_obj,
             )
         )
 

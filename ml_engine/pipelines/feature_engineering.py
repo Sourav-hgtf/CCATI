@@ -23,8 +23,13 @@ def compute_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     # 3. Support call trend (m1 - m3)
     df_feat["support_call_trend"] = df_feat["support_calls_m1"] - df_feat["support_calls_m3"]
 
-    # 4. Average monthly recharges across 3 months
-    df_feat["avg_monthly_recharges"] = ((df_feat["recharge_count_m1"] + df_feat["recharge_count_m2"] + df_feat["recharge_count_m3"]) / 3.0).round(2)
+    if "recharge_count_m1" not in df_feat.columns:
+        df_feat["recharge_count_m1"] = 0
+    if "recharge_count_m2" not in df_feat.columns:
+        df_feat["recharge_count_m2"] = 0
+    if "recharge_count_m3" not in df_feat.columns:
+        df_feat["recharge_count_m3"] = 0
+    df_feat["avg_monthly_recharges"] = np.round((df_feat["recharge_count_m1"] + df_feat["recharge_count_m2"] + df_feat["recharge_count_m3"]) / 3.0, 2)
 
     # 5. Tenure Buckets
     def get_tenure_bucket(tenure):
