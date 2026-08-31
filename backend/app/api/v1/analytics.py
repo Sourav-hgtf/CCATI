@@ -151,18 +151,23 @@ def get_churn_trend(
     conn.close()
 
     base_rate = round((high_cnt / total) * 100, 1)
+    p_lower = period.lower()
 
-    # 6-month historical trend derived from base database rate
-    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"]
+    if p_lower == "weekly":
+        periods = ["Wk 1", "Wk 2", "Wk 3", "Wk 4", "Wk 5", "Wk 6", "Wk 7"]
+    elif p_lower == "quarterly":
+        periods = ["Q1", "Q2", "Q3", "Q4"]
+    else:
+        periods = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul"]
+
     trend_data = []
-
-    for idx, m in enumerate(months):
-        offset = (len(months) - 1 - idx) * 0.8
+    for idx, p_label in enumerate(periods):
+        offset = (len(periods) - 1 - idx) * 0.6
         rate = round(max(5.0, base_rate + offset), 1)
         at_risk = int(total * (rate / 100.0))
         trend_data.append(
             ChurnTrendPointResponse(
-                time_period=m,
+                time_period=p_label,
                 churn_rate=rate,
                 customers_at_risk=at_risk,
             )

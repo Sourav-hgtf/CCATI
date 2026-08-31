@@ -1,7 +1,8 @@
 const API_BASE = '/api/v1';
 
 export async function fetchApi<T>(endpoint: string, options: RequestInit = {}, fallbackMockData?: T): Promise<T> {
-  const token = localStorage.getItem('auth_token') || '';
+  const rawToken = localStorage.getItem('auth_token');
+  const token = rawToken && rawToken !== 'null' && rawToken !== 'undefined' ? rawToken : '';
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

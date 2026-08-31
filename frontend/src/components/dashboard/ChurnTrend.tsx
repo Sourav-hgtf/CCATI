@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ChurnTrendPoint } from '../../types';
 
 interface ChurnTrendProps {
   data: ChurnTrendPoint[];
+  period?: 'Weekly' | 'Monthly' | 'Quarterly';
+  onPeriodChange?: (period: 'Weekly' | 'Monthly' | 'Quarterly') => void;
 }
 
-export const ChurnTrend: React.FC<ChurnTrendProps> = ({ data }) => {
-  const [period, setPeriod] = useState<'Weekly' | 'Monthly' | 'Quarterly'>('Monthly');
-
+export const ChurnTrend: React.FC<ChurnTrendProps> = ({ data, period = 'Monthly', onPeriodChange }) => {
   return (
     <div className="dark-card p-6 flex flex-col justify-between h-full">
       <div className="flex items-center justify-between mb-4">
@@ -20,9 +20,10 @@ export const ChurnTrend: React.FC<ChurnTrendProps> = ({ data }) => {
           {(['Weekly', 'Monthly', 'Quarterly'] as const).map((p) => (
             <button
               key={p}
-              onClick={() => setPeriod(p)}
+              type="button"
+              onClick={() => onPeriodChange?.(p)}
               className={`px-2.5 py-1 rounded-md transition ${
-                period === p ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-gray-200'
+                period === p ? 'bg-primary text-white shadow-sm font-bold' : 'text-gray-400 hover:text-gray-200'
               }`}
             >
               {p}
