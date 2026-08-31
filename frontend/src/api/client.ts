@@ -1,6 +1,6 @@
 const API_BASE = ((import.meta.env.VITE_API_URL as string) || '').replace(/\/$/, '') + '/api/v1';
 
-export async function fetchApi<T>(endpoint: string, options: RequestInit = {}, fallbackMockData?: T): Promise<T> {
+export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const rawToken = localStorage.getItem('auth_token');
   const token = rawToken && rawToken !== 'null' && rawToken !== 'undefined' ? rawToken : '';
   const headers = {
@@ -16,9 +16,6 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}, f
     });
 
     if (!response.ok) {
-      if (fallbackMockData !== undefined) {
-        return fallbackMockData;
-      }
       const errorData = await response.json().catch(() => ({}));
       const message =
         typeof errorData.detail === 'string'
@@ -29,9 +26,6 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}, f
 
     return await response.json();
   } catch (err) {
-    if (fallbackMockData !== undefined) {
-      return fallbackMockData;
-    }
     throw err;
   }
 }
