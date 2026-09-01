@@ -13,9 +13,9 @@
       "name": "synthetic_latest",
       "source": "synthetic",
       "path": "/Users/souravranjansamal/Downloads/Learning Project/data/raw/customer_usage_raw.parquet",
-      "sha256": "007ea26339ac9cf84a6b32358ae674f1e59ada6009d312ff1858c0408a4306ad",
+      "sha256": "d1652002e8924929e445375675c53122e8531bc773d16b9a81c7df3c603c6cd1",
       "row_count": 1500,
-      "registered_at": "2026-09-01T15:28:58.987122+00:00",
+      "registered_at": "2026-09-01T15:47:05.013944+00:00",
       "notes": "Auto-generated synthetic telecom dataset"
     },
     "cell2cell_tmpzqci2fqf": {
@@ -116,6 +116,24 @@
       "row_count": 500,
       "registered_at": "2026-09-01T15:28:59.035478+00:00",
       "notes": "Cell2Cell Kaggle dataset. Raw file: tmphqr1rbb1.csv"
+    },
+    "cell2cell_tmpnp5amsh_": {
+      "name": "cell2cell_tmpnp5amsh_",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmpnp5amsh_.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T15:47:04.581058+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmpnp5amsh_.csv"
+    },
+    "cell2cell_tmp4e_l1ntm": {
+      "name": "cell2cell_tmp4e_l1ntm",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp4e_l1ntm.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T15:47:05.063151+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp4e_l1ntm.csv"
     }
   }
 }
