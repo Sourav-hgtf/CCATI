@@ -276,12 +276,25 @@ class KaggleIngestRequest(BaseModel):
     )
 
 
+class TelcoIngestRequest(BaseModel):
+    """Request body for the Telco CSV ingestion endpoint."""
+    telco_csv_path: str = Field(
+        default="data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv",
+        description="Path to the IBM Telco CSV file.",
+        examples=["data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv"],
+    )
+    schedule_type: str = Field(
+        default="on_demand",
+        description="Audit label for this ingestion run.",
+    )
+
+
 class RetrainRequest(BaseModel):
     """Request body for the model retraining endpoint."""
     data_source: str = Field(
         default="synthetic",
-        description="Dataset to train on: 'synthetic' or 'kaggle'.",
-        examples=["synthetic", "kaggle"],
+        description="Dataset to train on: 'synthetic', 'kaggle', or 'telco'.",
+        examples=["synthetic", "kaggle", "telco"],
     )
     promote_best: bool = Field(
         default=True,
@@ -364,10 +377,10 @@ def trigger_model_retrain(
     The ``data_source`` tag is stored in the model registry metadata for full
     traceability of which dataset produced each model version.
     """
-    if payload.data_source not in ("synthetic", "kaggle"):
+    if payload.data_source not in ("synthetic", "kaggle", "telco"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid data_source '{payload.data_source}'. Must be 'synthetic' or 'kaggle'.",
+            detail=f"Invalid data_source '{payload.data_source}'. Must be 'synthetic', 'kaggle', or 'telco'.",
         )
 
     from ml_engine.pipelines.training import train_churn_classification_pipeline
@@ -382,7 +395,7 @@ def trigger_model_retrain(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"Training data not found: {exc}. "
-                "Run kaggle-ingest first if using data_source='kaggle'."
+                "Run kaggle-ingest or telco-ingest first."
             ),
         )
     except Exception as exc:
@@ -430,3 +443,55 @@ def get_dataset_registry(
         "datasets": datasets,
     }
 
+
+@router.post("/admin/training/telco-ingest", dependencies=[Depends(rate_limit_admin)])
+def trigger_telco_ingestion(
+    payload: TelcoIngestRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_roles([ROLE_ADMIN])),
+):
+    """Ingest the IBM Telco Customer Churn CSV through the canonical ML pipeline (Admin only).
+
+    Downloads from Kaggle: ``blastchar/telco-customer-churn``.
+    Default file path: ``data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv``.
+    """
+    from ml_engine.pipelines.ingestion import run_batch_ingestion
+
+    csv_path = Path(payload.telco_csv_path)
+
+    try:
+        summary = run_batch_ingestion(
+            source="telco",
+            raw_telco_path=csv_path,
+            db_path=None,
+            schedule_type=payload.schedule_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Telco ingestion failed: {exc}",
+        )
+
+    log_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="TELCO_INGEST",
+        target_resource=f"file:{payload.telco_csv_path}",
+        details=(
+            f"Ingested {summary.get('rows_ingested', 0):,} rows from "
+            f"'{payload.telco_csv_path}'. Status: {summary.get('status')}"
+        ),
+        request_id=request.headers.get("X-Request-ID"),
+        event_type="ML_DATA_INGESTION",
+        status="SUCCESS",
+    )
+
+    return {
+        "message": "Telco dataset ingested successfully.",
+        "summary": summary,
+    }

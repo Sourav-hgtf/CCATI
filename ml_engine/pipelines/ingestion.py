@@ -323,5 +323,141 @@ def _run_kaggle_ingestion(
     return summary
 
 
+def _run_telco_ingestion(
+    raw_telco_path: Path | None,
+    db_path: Path,
+    schedule_type: str,
+) -> dict[str, Any]:
+    """TASK-21: Ingest the IBM Telco Customer Churn CSV through the canonical pipeline.
+
+    The raw CSV is **never modified**.  Processing steps:
+    1. Schema validation (confirm IBM Telco dataset)
+    2. Adapter: Telco → canonical schema
+    3. Standard DQ checks & malformed-row filtering
+    4. Missing-value imputation
+    5. Derived feature engineering
+    6. Save to ``data/processed/telco_features.parquet`` (dataset-specific)
+    7. Also save to ``data/processed/customer_features.parquet`` (training default)
+    8. Register dataset with SHA-256 in ``data/raw/dataset_registry.json``
+    9. Persist customers to database (SQLite for tests, PostgreSQL for prod)
+    """
+    # Default path for the blastchar/telco-customer-churn download
+    if raw_telco_path is None:
+        raw_telco_path = RAW_DATA_DIR / "WA_Fn-UseC_-Telco-Customer-Churn.csv"
+
+    raw_telco_path = Path(raw_telco_path)
+    if not raw_telco_path.exists():
+        raise ValueError(
+            f"Telco CSV not found at '{raw_telco_path}'. "
+            "Run: kaggle datasets download blastchar/telco-customer-churn "
+            "--path data/raw/ --unzip"
+        )
+
+    print(f"[Telco Ingestion] Loading IBM Telco dataset from: {raw_telco_path}")
+    df_raw = pd.read_csv(raw_telco_path, low_memory=False)
+    total_raw_rows = len(df_raw)
+    print(f"[Telco Ingestion] Loaded {total_raw_rows:,} rows, {len(df_raw.columns)} columns")
+
+    # 1. IBM Telco schema validation
+    is_valid, missing_cols = validate_telco_schema(df_raw)
+    if not is_valid:
+        from ml_engine.pipelines.data_quality import DataValidationError
+        raise DataValidationError(
+            f"IBM Telco schema validation failed. "
+            f"Missing critical columns: {missing_cols}. "
+            f"Found columns: {list(df_raw.columns[:10])}..."
+        )
+    print(f"[Telco Ingestion] Schema validation PASSED")
+
+    # 2. Adapt Telco → canonical schema
+    df_canonical = adapt_telco_to_canonical(df_raw)
+    print(f"[Telco Ingestion] Adapted to canonical schema: {len(df_canonical.columns)} columns")
+
+    # 3. Standard DQ checks
+    df_valid, quality_report = validate_and_filter_raw_data(df_canonical)
+    print(
+        f"[Telco Ingestion] DQ Check: {quality_report['status']} | "
+        f"Valid: {quality_report['valid_rows_passed']} | "
+        f"Filtered: {quality_report['malformed_rows_filtered']}"
+    )
+
+    # 4. Imputation
+    df_clean = clean_and_impute_missing(df_valid)
+
+    # 5. Feature engineering (derived features)
+    df_features = compute_derived_features(df_clean)
+
+    # 6. Save dataset-specific parquet
+    PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    telco_parquet_path = PROCESSED_DATA_DIR / "telco_features.parquet"
+    df_features.to_parquet(telco_parquet_path, index=False)
+    print(f"[Telco Ingestion] Saved Telco features to: {telco_parquet_path}")
+
+    # 7. Also save to standard training path
+    processed_parquet_path = PROCESSED_DATA_DIR / "customer_features.parquet"
+    df_features.to_parquet(processed_parquet_path, index=False)
+
+    # Save DQ report
+    dq_report_path = PROCESSED_DATA_DIR / "dq_report.json"
+    with open(dq_report_path, "w") as f:
+        json.dump(quality_report, f, indent=2)
+
+    # 8. Register in dataset registry with SHA-256
+    try:
+        registry = DatasetRegistry()
+        registry.register_dataset(
+            name=f"telco_{raw_telco_path.stem}",
+            path=raw_telco_path,
+            source="telco",
+            row_count=len(df_features),
+            notes=f"IBM Telco Customer Churn (blastchar). Raw file: {raw_telco_path.name}",
+        )
+    except Exception as exc:
+        print(f"[DatasetRegistry] Warning: Could not register Telco dataset: {exc}")
+
+    # 9. Persist to database
+    if db_path is not None and str(db_path).endswith(".db"):
+        conn = sqlite3.connect(db_path)
+        df_features.to_sql("customers", conn, if_exists="replace", index=False)
+        conn.close()
+    else:
+        from backend.app.db.session import SessionLocal
+        from backend.app.db.models.customer import Customer
+
+        session = SessionLocal()
+        try:
+            session.query(Customer).delete()
+            cust_records = df_features.to_dict(orient="records")
+            for r in cust_records:
+                valid_cols = {c.name for c in Customer.__table__.columns}
+                filtered = {k: v for k, v in r.items() if k in valid_cols}
+                session.add(Customer(**filtered))
+            session.commit()
+            print(f"[Telco Ingestion] Persisted {len(cust_records):,} customers to PostgreSQL")
+        except Exception as e:
+            session.rollback()
+            print(f"[Telco Ingestion] Error persisting to PostgreSQL: {e}")
+        finally:
+            session.close()
+
+    summary = {
+        "status": "SUCCESS",
+        "source": "telco",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "schedule_type": schedule_type,
+        "rows_received": total_raw_rows,
+        "rows_ingested": len(df_features),
+        "malformed_rows_filtered": quality_report["malformed_rows_filtered"],
+        "telco_parquet_output": str(telco_parquet_path),
+        "parquet_output": str(processed_parquet_path),
+        "database_output": str(db_path),
+        "dq_report_path": str(dq_report_path),
+        "quality_status": quality_report["status"],
+        "raw_source_file": str(raw_telco_path),
+    }
+    print(f"[Telco Ingestion] Completed: {summary}")
+    return summary
+
+
 if __name__ == "__main__":
     run_batch_ingestion()

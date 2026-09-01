@@ -12,10 +12,10 @@
     "synthetic_latest": {
       "name": "synthetic_latest",
       "source": "synthetic",
-      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/pytest-of-souravranjansamal/pytest-2/test_ticket_101_ingestion_malf0/raw_test.csv",
-      "sha256": "d5864442114e6fbee8c4b3f331e6a989509568080b8f4e8306f502fa4b73db8f",
-      "row_count": 1,
-      "registered_at": "2026-09-01T12:19:59.785870+00:00",
+      "path": "/Users/souravranjansamal/Downloads/Learning Project/data/raw/customer_usage_raw.parquet",
+      "sha256": "007ea26339ac9cf84a6b32358ae674f1e59ada6009d312ff1858c0408a4306ad",
+      "row_count": 1500,
+      "registered_at": "2026-09-01T12:36:58.567696+00:00",
       "notes": "Auto-generated synthetic telecom dataset"
     },
     "cell2cell_tmpzqci2fqf": {
@@ -35,6 +35,69 @@
       "row_count": 500,
       "registered_at": "2026-09-01T12:19:11.034661+00:00",
       "notes": "Cell2Cell Kaggle dataset. Raw file: tmp_59l2u1a.csv"
+    },
+    "telco_WA_Fn-UseC_-Telco-Customer-Churn": {
+      "name": "telco_WA_Fn-UseC_-Telco-Customer-Churn",
+      "source": "telco",
+      "path": "/Users/souravranjansamal/Downloads/Learning Project/data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv",
+      "sha256": "88be4b93fbe0cc83421af1c503794c97c342eca914c1576db7c276e61d61358a",
+      "row_count": 7043,
+      "registered_at": "2026-09-01T12:32:43.663912+00:00",
+      "notes": "IBM Telco Customer Churn (blastchar). Raw file: WA_Fn-UseC_-Telco-Customer-Churn.csv"
+    },
+    "cell2cell_tmpjrul1wsn": {
+      "name": "cell2cell_tmpjrul1wsn",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmpjrul1wsn.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T12:33:16.316162+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmpjrul1wsn.csv"
+    },
+    "cell2cell_tmp9ceb77hw": {
+      "name": "cell2cell_tmp9ceb77hw",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp9ceb77hw.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T12:33:16.879620+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp9ceb77hw.csv"
+    },
+    "cell2cell_tmp2wfudegn": {
+      "name": "cell2cell_tmp2wfudegn",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp2wfudegn.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T12:34:54.710956+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp2wfudegn.csv"
+    },
+    "cell2cell_tmph1shgi4f": {
+      "name": "cell2cell_tmph1shgi4f",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmph1shgi4f.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T12:34:55.281190+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmph1shgi4f.csv"
+    },
+    "cell2cell_tmp89ftb0is": {
+      "name": "cell2cell_tmp89ftb0is",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp89ftb0is.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T12:36:58.056804+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp89ftb0is.csv"
+    },
+    "cell2cell_tmpa8t3taqf": {
+      "name": "cell2cell_tmpa8t3taqf",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmpa8t3taqf.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T12:36:58.615550+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmpa8t3taqf.csv"
     }
   }
 }
