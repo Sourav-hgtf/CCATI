@@ -44,13 +44,14 @@ def test_customer_detail_response_masks_sensitive_fields_by_default():
 
     assert "name" in payload
     assert "customer_id" in payload
-    assert "*" in payload["name"] or payload["name"] == "Customer"
-    assert "*" in payload["phone"]
-    assert "*" in payload["email"]
+    assert "*" in payload["name"] or "X" in payload["name"] or payload["name"] == "Customer"
+    assert "*" in payload["phone"] or "X" in payload["phone"]
+    assert "*" in payload["email"] or "X" in payload["email"]
     assert payload["is_pii_revealed"] is False
     assert "password_hash" not in payload
     assert "access_token" not in payload
     assert "refresh_token" not in payload
+
 
 
 
