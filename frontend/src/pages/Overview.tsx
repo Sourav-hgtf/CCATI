@@ -17,6 +17,14 @@ export const Overview: React.FC = () => {
 
   const [trendPeriod, setTrendPeriod] = useState<'Weekly' | 'Monthly' | 'Quarterly'>('Monthly');
 
+  // Date range mapping
+  const dateRangeOptions: Record<string, string> = {
+    'Today': '1d',
+    '7 Days': '7d',
+    '30 Days': '30d',
+    '90 Days': '90d',
+  };
+
   const { data: metrics, isLoading: loadingMetrics, isError: metricsError, refetch } = useQuery({
     queryKey: ['overview-metrics', dateRange],
     queryFn: () => getOverviewMetrics(dateRange),
@@ -74,20 +82,17 @@ export const Overview: React.FC = () => {
         </div>
 
         <div className="flex bg-surface p-1 rounded-lg border border-border text-xs font-medium">
-          {['Today', '7 Days', '30 Days', '90 Days'].map((range) => {
-            const key = range.toLowerCase().replace(' ', '');
-            return (
-              <button
-                key={range}
-                onClick={() => setDateRange(key)}
-                className={`px-3 py-1.5 rounded-md transition ${
-                  dateRange === key ? 'bg-primary text-white font-semibold shadow' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                {range}
-              </button>
-            );
-          })}
+          {Object.entries(dateRangeOptions).map(([label, key]) => (
+            <button
+              key={label}
+              onClick={() => setDateRange(key)}
+              className={`px-3 py-1.5 rounded-md transition ${
+                dateRange === key ? 'bg-primary text-white font-semibold shadow' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 

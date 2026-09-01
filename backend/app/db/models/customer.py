@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, Text
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime
+from datetime import datetime
 from backend.app.db.base import Base
 
 class Customer(Base):
@@ -85,3 +86,4 @@ class CustomerScore(Base):
     
     actioned = Column(Integer, nullable=True)
     actioned_at = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=True)
