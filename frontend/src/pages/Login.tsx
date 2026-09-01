@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Shield, Lock, Mail, AlertCircle, Sparkles, CheckCircle2 } from 'lucide-react';
 
 const PRESET_ACCOUNTS = [
-  { role: 'Admin', email: 'admin@telecom.com', password: 'AdminPassword123!', desc: 'Full System Control & Audit' },
+  { role: 'Admin', email: 'samalsouravranjan@gmail.com', password: 'SriSourav207', desc: 'Full System Control & Audit' },
   { role: 'RetentionManager', email: 'manager@telecom.com', password: 'ManagerPassword123!', desc: 'Campaigns & PII Unmasking' },
   { role: 'Analyst', email: 'analyst@telecom.com', password: 'AnalystPassword123!', desc: 'Data Analytics & Models' },
   { role: 'ModelManager', email: 'modelmanager@telecom.com', password: 'ModelPassword123!', desc: 'Model Promotion & Rollback' },
@@ -17,8 +17,8 @@ export const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [email, setEmail] = useState('admin@telecom.com');
-  const [password, setPassword] = useState('AdminPassword123!');
+  const [email, setEmail] = useState('samalsouravranjan@gmail.com');
+  const [password, setPassword] = useState('SriSourav207');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 

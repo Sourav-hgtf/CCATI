@@ -13,7 +13,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange }) => 
     { id: 'RetentionManager', label: 'Retention Manager', email: 'manager@telecom.com' },
     { id: 'Executive', label: 'Executive / Viewer', email: 'executive@telecom.com' },
     { id: 'Analyst', label: 'Data / ML Analyst', email: 'analyst@telecom.com' },
-    { id: 'Admin', label: 'System Admin', email: 'admin@telecom.com' },
+    { id: 'Admin', label: 'System Admin', email: 'samalsouravranjan@gmail.com' },
   ];
 
   return (

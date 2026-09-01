@@ -154,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onCloseMobile }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-white truncate">Dev Admin</p>
-                <p className="text-[10px] text-gray-400 truncate">admin@telecom.com</p>
+                <p className="text-[10px] text-gray-400 truncate">samalsouravranjan@gmail.com</p>
               </div>
             </div>
           </div>
