@@ -3,6 +3,7 @@
 import pytest
 from backend.app.db.base import Base
 from backend.app.db.session import engine
+from backend.app.core.rate_limiter import _default_store
 from backend.app.core.security import create_access_token
 from backend.scripts.seed_users import seed_database_users
 
@@ -12,6 +13,15 @@ def initialize_test_database():
     """Ensure database tables and seed users are initialized before test execution."""
     Base.metadata.create_all(bind=engine)
     seed_database_users()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limit_counters():
+    """Reset rate limiter counters before and after each test."""
+    _default_store.reset()
+    yield
+    _default_store.reset()
+
 
 
 @pytest.fixture

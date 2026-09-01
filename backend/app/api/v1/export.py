@@ -7,13 +7,14 @@ from fastapi.responses import StreamingResponse
 import pandas as pd
 from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
+from backend.app.core.rate_limiter import rate_limit_export
 from backend.app.core.rbac import UserContext, require_roles
 from backend.app.core.security import mask_name, mask_phone
 
 router = APIRouter()
 
 
-@router.get("/export/customers")
+@router.get("/export/customers", dependencies=[Depends(rate_limit_export)])
 def export_at_risk_customers_csv(
     risk_tier: str | None = None,
     plan_tier: str | None = None,

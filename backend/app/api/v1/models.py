@@ -1,7 +1,6 @@
-"""Model Monitoring, Data Drift, Model Performance, and Registry Information Endpoints (TICKET-505, TASK 3, TASK 8, TASK 9)."""
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from backend.app.core.audit import log_audit_event
+from backend.app.core.rate_limiter import rate_limit_admin, rate_limit_read
 from backend.app.core.rbac import UserContext, get_current_user, require_roles
 from backend.app.schemas.model_metrics import (
     ConfusionMatrixData,
@@ -194,12 +193,15 @@ def get_model_metrics(
     )
 
 
-@router.post("/models/promote/{version}")
+@router.post("/models/promote/{version}", dependencies=[Depends(rate_limit_admin)])
 def promote_model_version(
-    version: str,
+    version: str = Path(..., pattern=r"^[a-zA-Z0-9_.-]+$", min_length=1, max_length=100, description="Model version identifier"),
     current_user: UserContext = Depends(require_roles(["Admin", "ModelManager", "Analyst"])),
 ):
     """Promote a registered model version to active production model."""
+    if ".." in version or "/" in version or "\\" in version:
+        raise HTTPException(status_code=400, detail="Invalid model version identifier.")
+
     registry = ModelRegistry()
     try:
         promoted_info = registry.promote_model(version)
@@ -216,3 +218,4 @@ def promote_model_version(
         return {"status": "SUCCESS", "promoted": promoted_info}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+

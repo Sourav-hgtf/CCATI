@@ -6,6 +6,7 @@ Aggregates real-time customer churn, risk distribution, revenue-at-risk, and seg
 import sqlite3
 from fastapi import APIRouter, Depends, Query
 from backend.app.core.config import settings
+from backend.app.core.rate_limiter import rate_limit_read
 from backend.app.core.rbac import UserContext, require_roles
 from backend.app.schemas.analytics import (
     ContractBreakdownResponse,
@@ -16,7 +17,8 @@ from backend.app.schemas.analytics import (
 )
 from backend.app.api.v1.scoring import _ensure_scores_seeded
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(rate_limit_read)])
+
 
 
 @router.get("/analytics/overview", response_model=OverviewMetricsResponse)

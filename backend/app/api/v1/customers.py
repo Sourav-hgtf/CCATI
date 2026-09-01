@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
 from backend.app.core.logger import get_logger
+from backend.app.core.rate_limiter import rate_limit_admin, rate_limit_read
 from backend.app.core.rbac import UserContext, get_current_user, require_roles
 from backend.app.core.security import mask_email, mask_name, mask_phone
 from backend.app.schemas.customer import (
@@ -35,7 +36,7 @@ def _ensure_data_seeded():
         run_full_scoring_job(force_ingestion=True)
 
 
-@router.get("/customers", response_model=CustomerPaginatedResponse)
+@router.get("/customers", response_model=CustomerPaginatedResponse, dependencies=[Depends(rate_limit_read)])
 def get_customers(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -122,7 +123,7 @@ def get_customers(
     )
 
 
-@router.get("/customers/{customer_id}", response_model=CustomerDetailResponse)
+@router.get("/customers/{customer_id}", response_model=CustomerDetailResponse, dependencies=[Depends(rate_limit_read)])
 def get_customer_detail(
     customer_id: str,
     reveal_pii: bool = False,
@@ -206,7 +207,7 @@ def get_customer_detail(
     )
 
 
-@router.post("/customers/{customer_id}/action")
+@router.post("/customers/{customer_id}/action", dependencies=[Depends(rate_limit_admin)])
 def mark_customer_actioned(
     customer_id: str,
     current_user: UserContext = Depends(require_roles(["RetentionManager", "Admin"])),

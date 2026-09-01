@@ -8,12 +8,23 @@ client = TestClient(app)
 
 def get_auth_token(role: str = "Admin") -> str:
     """Utility helper to fetch a JWT token for testing."""
+    role_email_map = {
+        "Admin": ("admin@telecom.com", "AdminPassword123!"),
+        "RetentionManager": ("manager@telecom.com", "ManagerPassword123!"),
+        "Analyst": ("analyst@telecom.com", "AnalystPassword123!"),
+        "ModelManager": ("modelmanager@telecom.com", "ModelPassword123!"),
+        "Operations": ("operations@telecom.com", "OpsPassword123!"),
+        "Viewer": ("viewer@telecom.com", "ViewerPassword123!"),
+        "Executive": ("executive@telecom.com", "Password123!"),
+    }
+    email, password = role_email_map.get(role, (f"{role.lower()}@telecom.com", "Password123!"))
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": f"{role.lower()}@telecom.com", "password": "Password123!"},
+        json={"email": email, "password": password},
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, f"Login failed for role {role}: {response.text}"
     return response.json()["access_token"]
+
 
 
 def test_ticket_502_customer_list():

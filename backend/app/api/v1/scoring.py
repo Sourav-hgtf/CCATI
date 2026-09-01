@@ -10,6 +10,11 @@ from business_engine.risk_scoring import calculate_risk_tier
 from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
 from backend.app.core.metrics import metrics_collector
+from backend.app.core.rate_limiter import (
+    rate_limit_admin,
+    rate_limit_prediction,
+    rate_limit_read,
+)
 from backend.app.core.rbac import UserContext, require_roles
 from backend.app.schemas.scoring import (
     DetailedExplanation,
@@ -298,7 +303,7 @@ def _compute_customer_prediction(customer_id: str, request_id: str | None = None
     )
 
 
-@router.post("/predict", response_model=PredictResponse)
+@router.post("/predict", response_model=PredictResponse, dependencies=[Depends(rate_limit_prediction)])
 def predict_customer_churn_post(
     payload: PredictRequest,
     request: Request,
@@ -309,7 +314,7 @@ def predict_customer_churn_post(
     return _compute_customer_prediction(payload.customer_id, request_id=req_id)
 
 
-@router.get("/predict/{customer_id}", response_model=PredictResponse)
+@router.get("/predict/{customer_id}", response_model=PredictResponse, dependencies=[Depends(rate_limit_prediction)])
 def predict_customer_churn_get(
     customer_id: str,
     request: Request,
@@ -510,7 +515,7 @@ def _execute_scoring_task(job_id: str, force_ingestion: bool):
         JOB_STATE[job_id]["message"] = str(e)
 
 
-@router.post("/scoring-jobs", response_model=ScoringJobResponse)
+@router.post("/scoring-jobs", response_model=ScoringJobResponse, dependencies=[Depends(rate_limit_admin)])
 def trigger_scoring_job(
     payload: ScoringJobTriggerRequest,
     background_tasks: BackgroundTasks,

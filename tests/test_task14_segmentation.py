@@ -56,11 +56,15 @@ client = TestClient(app)
 ADMIN_TOKEN: str = ""
 
 
-def get_auth_headers() -> dict:
-    resp = client.post("/api/v1/auth/login", json={"email": "admin@telecom.com", "password": "admin123"})
-    if resp.status_code == 200:
-        return {"Authorization": f"Bearer {resp.json()['access_token']}"}
-    return {}
+from backend.app.core.security import create_access_token
+
+
+def get_auth_headers():
+    token = create_access_token(
+        subject={"sub": "usr-admin-001", "email": "admin@telecom.com", "role": "Admin"}
+    )
+    return {"Authorization": f"Bearer {token}"}
+
 
 
 @pytest.fixture(scope="module")

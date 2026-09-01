@@ -9,6 +9,7 @@ import pandas as pd
 
 from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
+from backend.app.core.rate_limiter import rate_limit_read
 from backend.app.core.rbac import UserContext, get_current_user
 from backend.app.core.security import mask_name
 from backend.app.schemas.segment import (
@@ -30,7 +31,8 @@ from ml_engine.pipelines.clustering import (
     load_segmentation_artifacts,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(rate_limit_read)])
+
 
 
 def _get_macro_insights(profiles: list[dict]) -> SegmentMacroInsights:

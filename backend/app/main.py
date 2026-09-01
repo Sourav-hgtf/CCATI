@@ -85,6 +85,16 @@ async def security_and_observability_middleware(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=(), payment=()"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none';"
+
+    # HSTS for production or when enabled
+    if settings.ENABLE_HSTS or settings.APP_ENV == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # Cache-Control on API responses containing potentially sensitive subscriber data
+    if request.url.path.startswith("/api/v1/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
 
     # Structured access log — no PII, no secrets
     logger.info(
@@ -105,12 +115,27 @@ async def security_and_observability_middleware(request: Request, call_next):
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     correlation_id = request.headers.get(settings.REQUEST_ID_HEADER, f"err-{uuid.uuid4().hex[:8]}")
+    error_code = f"HTTP_{exc.status_code}"
+    if exc.status_code == 429:
+        error_code = "RATE_LIMIT_EXCEEDED"
+    elif exc.status_code == 401:
+        error_code = "UNAUTHORIZED"
+    elif exc.status_code == 403:
+        error_code = "FORBIDDEN"
+    elif exc.status_code == 404:
+        error_code = "HTTP_404"
+
+    headers = dict(exc.headers or {})
+    headers["X-Request-ID"] = correlation_id
+    headers["X-Correlation-ID"] = correlation_id
+
     return JSONResponse(
         status_code=exc.status_code,
+        headers=headers,
         content={
             "detail": exc.detail if isinstance(exc.detail, (str, dict, list)) else str(exc.detail),
             "error": {
-                "code": f"HTTP_{exc.status_code}",
+                "code": error_code,
                 "message": exc.detail if isinstance(exc.detail, str) else "Request error",
                 "request_id": correlation_id,
             },
@@ -123,6 +148,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     correlation_id = request.headers.get(settings.REQUEST_ID_HEADER, f"val-{uuid.uuid4().hex[:8]}")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        headers={"X-Request-ID": correlation_id, "X-Correlation-ID": correlation_id},
         content={
             "detail": exc.errors(),
             "error": {
@@ -148,6 +174,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        headers={"X-Request-ID": correlation_id, "X-Correlation-ID": correlation_id},
         content={
             "detail": "An internal server error occurred.",
             "error": {
@@ -157,6 +184,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
             },
         },
     )
+
 
 
 # Include Routers

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.core.audit import get_audit_logs, log_audit_event
 from backend.app.core.crypto import get_password_hash, validate_password_strength
+from backend.app.core.rate_limiter import rate_limit_admin
 from backend.app.core.rbac import (
     ALL_ROLES,
     ROLE_ADMIN,
@@ -32,7 +33,7 @@ from backend.app.schemas.auth import (
 router = APIRouter()
 
 
-@router.get("/admin/audit-logs")
+@router.get("/admin/audit-logs", dependencies=[Depends(rate_limit_admin)])
 def get_system_audit_logs(
     limit: int = 100,
     current_user: UserContext = Depends(require_roles([ROLE_ADMIN])),
@@ -42,7 +43,7 @@ def get_system_audit_logs(
     return {"total": len(logs), "logs": logs}
 
 
-@router.get("/admin/users", response_model=dict)
+@router.get("/admin/users", response_model=dict, dependencies=[Depends(rate_limit_admin)])
 def list_system_users(
     current_user: UserContext = Depends(require_roles([ROLE_ADMIN])),
     db: Session = Depends(get_db),
@@ -67,7 +68,7 @@ def list_system_users(
     return {"total": len(user_list), "users": user_list}
 
 
-@router.post("/admin/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/admin/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit_admin)])
 def create_system_user(
     payload: CreateUserRequest,
     request: Request,
@@ -140,7 +141,7 @@ def create_system_user(
     )
 
 
-@router.patch("/admin/users/{user_id}/role", response_model=UserResponse)
+@router.patch("/admin/users/{user_id}/role", response_model=UserResponse, dependencies=[Depends(rate_limit_admin)])
 def update_user_role(
     user_id: str,
     payload: UpdateUserRoleRequest,
@@ -199,7 +200,7 @@ def update_user_role(
     )
 
 
-@router.patch("/admin/users/{user_id}/status", response_model=UserResponse)
+@router.patch("/admin/users/{user_id}/status", response_model=UserResponse, dependencies=[Depends(rate_limit_admin)])
 def update_user_status(
     user_id: str,
     payload: UpdateUserStatusRequest,

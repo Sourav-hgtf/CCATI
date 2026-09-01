@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
 from backend.app.core.crypto import verify_password
+from backend.app.core.rate_limiter import rate_limit_auth
 from backend.app.core.rbac import (
     ROLE_PERMISSIONS,
     UserContext,
@@ -35,7 +36,7 @@ from backend.app.schemas.auth import (
 router = APIRouter()
 
 
-@router.post("/auth/login", response_model=TokenResponse)
+@router.post("/auth/login", response_model=TokenResponse, dependencies=[Depends(rate_limit_auth)])
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """Authenticate user with email/username and password."""
     user_repo = UserRepository(db)
@@ -175,7 +176,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     )
 
 
-@router.post("/auth/refresh", response_model=TokenResponse)
+@router.post("/auth/refresh", response_model=TokenResponse, dependencies=[Depends(rate_limit_auth)])
 def refresh_token_endpoint(
     payload: RefreshTokenRequest,
     request: Request,

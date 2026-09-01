@@ -23,12 +23,13 @@ from fastapi import APIRouter, Depends, Query
 from backend.app.core.audit import get_audit_events, purge_old_audit_events
 from backend.app.core.config import settings
 from backend.app.core.metrics import metrics_collector
+from backend.app.core.rate_limiter import rate_limit_admin, rate_limit_read
 from backend.app.core.rbac import UserContext, require_roles
 
 router = APIRouter()
 
 
-@router.get("/metrics")
+@router.get("/metrics", dependencies=[Depends(rate_limit_read)])
 def get_operational_metrics(
     current_user: UserContext = Depends(
         require_roles(["Admin", "ModelManager", "Analyst", "RetentionManager", "Operations", "Viewer"])
@@ -54,7 +55,7 @@ def get_operational_metrics(
     }
 
 
-@router.get("/audit/events")
+@router.get("/audit/events", dependencies=[Depends(rate_limit_read)])
 def list_audit_events(
     limit: int = Query(50, ge=1, le=500),
     event_type: str | None = Query(None, description="Filter by event category"),
@@ -97,7 +98,7 @@ def list_audit_events(
     }
 
 
-@router.post("/audit/events/purge")
+@router.post("/audit/events/purge", dependencies=[Depends(rate_limit_admin)])
 def purge_audit_events(
     retention_days: int | None = Query(
         None,

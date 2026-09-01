@@ -3,10 +3,12 @@
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from backend.app.core.rate_limiter import rate_limit_read
 from backend.app.core.rbac import UserContext, require_roles
 from backend.app.services.data_quality import DataQualityEngine
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(rate_limit_read)])
+
 
 
 class DataQualityIssueItem(BaseModel):

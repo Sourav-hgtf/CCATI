@@ -46,6 +46,30 @@ class Settings(BaseSettings):
             return f"sqlite:///{self.DB_PATH}"
         return self.DATABASE_URL
 
+    # ── Rate Limiting & Abuse Protection (TASK 19) ───────────────────────────
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 15
+    RATE_LIMIT_PREDICTION_PER_MINUTE: int = 60
+    RATE_LIMIT_READ_PER_MINUTE: int = 120
+    RATE_LIMIT_ADMIN_PER_MINUTE: int = 30
+    RATE_LIMIT_EXPORT_PER_MINUTE: int = 10
+
+    # Pagination Protection
+    DEFAULT_PAGE_SIZE: int = 20
+    MAX_PAGE_SIZE: int = 100
+
+    # Trusted Proxies for IP Resolution
+    TRUSTED_PROXIES: str = "127.0.0.1,::1"
+
+    # Security Headers
+    ENABLE_HSTS: bool = False  # Set to True in production with TLS
+
+    @property
+    def trusted_proxy_list(self) -> list[str]:
+        if not self.TRUSTED_PROXIES:
+            return ["127.0.0.1", "::1"]
+        return [ip.strip() for ip in self.TRUSTED_PROXIES.split(",") if ip.strip()]
+
     # ── Observability (TASK 12) ──────────────────────────────────────────────
     # LOG_LEVEL: Python logging level name (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     LOG_LEVEL: str = "INFO"
@@ -64,7 +88,7 @@ class Settings(BaseSettings):
     def cors_origins(self) -> list[str]:
         """Parse comma-separated allowed origins for CORS middleware."""
         if not self.ALLOWED_ORIGINS:
-            return ["*"]
+            return ["http://localhost:5173", "http://127.0.0.1:5173"]
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
 
     model_config = SettingsConfigDict(
@@ -76,3 +100,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

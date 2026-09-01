@@ -30,12 +30,15 @@ from backend.app.core.audit import log_audit_event, get_audit_events, purge_old_
 from backend.app.core.metrics import metrics_collector, _MetricsCollector
 from backend.app.core.config import settings
 from backend.app.core.logger import get_logger
+from backend.app.core.security import create_access_token
 
 
 client = TestClient(app, raise_server_exceptions=False)
 
-# Helper: admin auth header (RBAC fallback grants Admin when no token present)
-ADMIN_HEADERS = {"Authorization": "Bearer admin-dev-token"}
+# Helper: admin auth header with valid signed JWT
+ADMIN_TOKEN = create_access_token(subject={"sub": "usr-admin-001", "email": "admin@telecom.com", "role": "Admin"})
+ADMIN_HEADERS = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
