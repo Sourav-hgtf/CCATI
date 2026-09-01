@@ -19,10 +19,10 @@ from backend.app.db.repositories.user_repo import UserRepository
 SEED_USERS = [
     {
         "id": "usr-admin-001",
-        "email": "admin@telecom.com",
-        "username": "admin",
+        "email": "samalsouravranjan@gmail.com",
+        "username": "sourav",
         "full_name": "Dev Admin",
-        "password": "AdminPassword123!",
+        "password": "SriSourav207",
         "role": "Admin",
     },
     {
@@ -87,7 +87,7 @@ def seed_database_users():
 
     try:
         for u in SEED_USERS:
-            existing = repo.get_by_email(u["email"]) or repo.get_by_username(u["username"])
+            existing = repo.get_by_id(u["id"]) or repo.get_by_email(u["email"]) or repo.get_by_username(u["username"])
             if not existing:
                 repo.create_user(
                     user_id=u["id"],

@@ -237,31 +237,31 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
 
             <div className="dark-card p-5 space-y-2 border-[#272B36]">
               <span className="text-xs font-semibold text-gray-400">Precision Score</span>
-              <div className="text-2xl font-extrabold text-white">{m ? (m.precision * 100).toFixed(1) + '%' : 'N/A'}</div>
-              <span className="text-[10px] text-gray-500">Baseline: {(b.precision * 100).toFixed(1)}%</span>
+              <div className="text-2xl font-extrabold text-white">{m?.precision != null ? (m.precision * 100).toFixed(1) + '%' : 'N/A'}</div>
+              <span className="text-[10px] text-gray-500">Baseline: {b?.precision != null ? (b.precision * 100).toFixed(1) + '%' : 'N/A'}</span>
             </div>
 
             <div className="dark-card p-5 space-y-2 border-[#272B36]">
               <span className="text-xs font-semibold text-gray-400">Recall Score</span>
-              <div className="text-2xl font-extrabold text-emerald-400">{m ? (m.recall * 100).toFixed(1) + '%' : 'N/A'}</div>
-              <span className="text-[10px] text-gray-500">Baseline: {(b.recall * 100).toFixed(1)}%</span>
+              <div className="text-2xl font-extrabold text-emerald-400">{m?.recall != null ? (m.recall * 100).toFixed(1) + '%' : 'N/A'}</div>
+              <span className="text-[10px] text-gray-500">Baseline: {b?.recall != null ? (b.recall * 100).toFixed(1) + '%' : 'N/A'}</span>
             </div>
 
             <div className="dark-card p-5 space-y-2 border-[#272B36]">
               <span className="text-xs font-semibold text-gray-400">F1 Score</span>
-              <div className="text-2xl font-extrabold text-[#F5A623]">{m ? (m.f1 * 100).toFixed(1) + '%' : 'N/A'}</div>
-              <span className="text-[10px] text-gray-500">Baseline: {(b.f1 * 100).toFixed(1)}%</span>
+              <div className="text-2xl font-extrabold text-[#F5A623]">{m?.f1 != null ? (m.f1 * 100).toFixed(1) + '%' : 'N/A'}</div>
+              <span className="text-[10px] text-gray-500">Baseline: {b?.f1 != null ? (b.f1 * 100).toFixed(1) + '%' : 'N/A'}</span>
             </div>
 
             <div className="dark-card p-5 space-y-2 border-[#272B36]">
               <span className="text-xs font-semibold text-gray-400">ROC-AUC Score</span>
-              <div className="text-2xl font-extrabold text-blue-400">{m ? (m.roc_auc * 100).toFixed(1) + '%' : 'N/A'}</div>
-              <span className="text-[10px] text-gray-500">Baseline: {(b.roc_auc * 100).toFixed(1)}%</span>
+              <div className="text-2xl font-extrabold text-blue-400">{m?.roc_auc != null ? (m.roc_auc * 100).toFixed(1) + '%' : 'N/A'}</div>
+              <span className="text-[10px] text-gray-500">Baseline: {b?.roc_auc != null ? (b.roc_auc * 100).toFixed(1) + '%' : 'N/A'}</span>
             </div>
 
             <div className="dark-card p-5 space-y-2 border-[#272B36]">
               <span className="text-xs font-semibold text-gray-400">Decision Threshold</span>
-              <div className="text-2xl font-extrabold text-white">{(perfData.threshold * 100).toFixed(0)}%</div>
+              <div className="text-2xl font-extrabold text-white">{((perfData.threshold ?? 0.5) * 100).toFixed(0)}%</div>
               <span className="text-[10px] text-gray-500">Configured Cutoff</span>
             </div>
           </div>

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend.app.api.v1 import (
     admin, analytics, auth, customers, data_quality,
-    export, health, models, observability, scoring, segments,
+    export, health, models, observability, reports, retention, scoring, segments,
 )
 from backend.app.core.config import settings
 from backend.app.core.logger import get_logger
@@ -200,6 +200,8 @@ app.include_router(scoring.router, prefix=settings.API_V1_STR, tags=["Scoring Jo
 app.include_router(export.router, prefix=settings.API_V1_STR, tags=["Data Export"])
 app.include_router(admin.router, prefix=settings.API_V1_STR, tags=["Admin"])
 app.include_router(observability.router, prefix=settings.API_V1_STR, tags=["Observability"])
+app.include_router(retention.router, prefix=settings.API_V1_STR, tags=["Retention"])
+app.include_router(reports.router, prefix=settings.API_V1_STR, tags=["Reports"])
 
 
 @app.get("/")
