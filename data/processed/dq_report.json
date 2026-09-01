@@ -1,7 +1,7 @@
 {
-  "total_rows_received": 500,
-  "valid_rows_passed": 500,
-  "malformed_rows_filtered": 0,
+  "total_rows_received": 2,
+  "valid_rows_passed": 1,
+  "malformed_rows_filtered": 1,
   "null_counts": {
     "customer_id": 0,
     "plan_tier": 0,
@@ -16,5 +16,5 @@
     "support_calls_m1": 0
   },
   "schema_validation": "PASSED",
-  "status": "PASSED"
+  "status": "PASSED_WITH_WARNINGS"
 }

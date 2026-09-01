@@ -12,10 +12,10 @@
     "synthetic_latest": {
       "name": "synthetic_latest",
       "source": "synthetic",
-      "path": "/Users/souravranjansamal/Downloads/Learning Project/data/raw/customer_usage_raw.parquet",
-      "sha256": "d1652002e8924929e445375675c53122e8531bc773d16b9a81c7df3c603c6cd1",
-      "row_count": 1500,
-      "registered_at": "2026-09-01T15:53:44.156364+00:00",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/pytest-of-souravranjansamal/pytest-8/test_ticket_101_ingestion_malf0/raw_test.csv",
+      "sha256": "d5864442114e6fbee8c4b3f331e6a989509568080b8f4e8306f502fa4b73db8f",
+      "row_count": 1,
+      "registered_at": "2026-09-01T16:27:02.263876+00:00",
       "notes": "Auto-generated synthetic telecom dataset"
     },
     "cell2cell_tmpzqci2fqf": {
@@ -152,6 +152,78 @@
       "row_count": 500,
       "registered_at": "2026-09-01T15:53:44.203972+00:00",
       "notes": "Cell2Cell Kaggle dataset. Raw file: tmp2urg_d01.csv"
+    },
+    "cell2cell_tmpr28bh15v": {
+      "name": "cell2cell_tmpr28bh15v",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmpr28bh15v.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T16:15:32.703001+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmpr28bh15v.csv"
+    },
+    "cell2cell_tmp1v69rzas": {
+      "name": "cell2cell_tmp1v69rzas",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp1v69rzas.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T16:15:33.301249+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp1v69rzas.csv"
+    },
+    "cell2cell_tmpkzz9jymv": {
+      "name": "cell2cell_tmpkzz9jymv",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmpkzz9jymv.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T16:21:42.640895+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmpkzz9jymv.csv"
+    },
+    "cell2cell_tmp221cyggh": {
+      "name": "cell2cell_tmp221cyggh",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp221cyggh.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T16:21:43.157810+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp221cyggh.csv"
+    },
+    "cell2cell_tmpf2blb2_5": {
+      "name": "cell2cell_tmpf2blb2_5",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmpf2blb2_5.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T16:23:23.902722+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmpf2blb2_5.csv"
+    },
+    "cell2cell_tmp56orlilv": {
+      "name": "cell2cell_tmp56orlilv",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp56orlilv.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T16:23:24.428901+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp56orlilv.csv"
+    },
+    "cell2cell_tmpqlvivqf8": {
+      "name": "cell2cell_tmpqlvivqf8",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmpqlvivqf8.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T16:25:32.315425+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmpqlvivqf8.csv"
+    },
+    "cell2cell_tmp5zrihpbl": {
+      "name": "cell2cell_tmp5zrihpbl",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp5zrihpbl.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T16:25:33.024466+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp5zrihpbl.csv"
     }
   }
 }

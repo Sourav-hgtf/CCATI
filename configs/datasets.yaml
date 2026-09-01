@@ -1,0 +1,88 @@
+"""Dataset Configuration (TASK-21).
+
+Defines dataset sources, Kaggle identifiers, schema, and validation rules.
+"""
+
+# Kaggle Dataset Configuration
+KAGGLE_DATASETS = {
+    "cell2cell": {
+        "identifier": "aryafar/cell2cell-telecom-churn",
+        "description": "Duke University Cell2Cell telecom churn dataset from Kaggle",
+        "rows": 71047,
+        "columns": 58,
+        "source": "kaggle",
+    },
+    "telco": {
+        "identifier": "blastchar/telco-customer-churn",
+        "description": "IBM Watson Telco Customer Churn dataset",
+        "rows": 7043,
+        "columns": 21,
+        "source": "kaggle",
+    },
+}
+
+# Canonical Schema (matches ml_engine/config.py)
+CANONICAL_SCHEMA = {
+    "identity": ["customer_id", "name", "phone", "email"],
+    "target": ["churn"],
+    "categorical": ["plan_tier", "contract_type", "payment_method", "region"],
+    "numerical": [
+        "tenure_months",
+        "monthly_charges",
+        "total_charges",
+        "call_minutes_m1",
+        "call_minutes_m2",
+        "call_minutes_m3",
+        "data_gb_m1",
+        "data_gb_m2",
+        "data_gb_m3",
+        "recharge_count_m1",
+        "recharge_count_m2",
+        "recharge_count_m3",
+        "support_calls_m1",
+        "support_calls_m2",
+        "support_calls_m3",
+    ],
+    "derived": [
+        "usage_drop_call_pct",
+        "usage_drop_data_pct",
+        "support_call_trend",
+        "avg_monthly_recharges",
+        "tenure_bucket",
+    ],
+}
+
+# Data Quality Thresholds
+DATA_QUALITY = {
+    "min_rows": 1000,
+    "max_null_percentage": 20,  # 20% nulls allowed per column
+    "duplicate_check": True,
+    "target_ratio_min": 0.05,  # Min churn rate 5%
+    "target_ratio_max": 0.95,  # Max churn rate 95%
+    "numerical_outlier_std": 3.0,  # Std devs for outlier detection
+}
+
+# Feature Engineering Settings
+FEATURE_ENGINEERING = {
+    "imputation_strategy": "median",  # For numerical
+    "categorical_encoding": "onehot",
+    "scaling_method": "standard",
+    "derive_contract_from_tenure": True,
+    "derive_plan_from_charges": True,
+}
+
+# Training Configuration
+TRAINING = {
+    "test_split": 0.2,
+    "random_state": 42,
+    "stratify_on_target": True,
+    "smote_enabled": True,
+    "smote_sampling_strategy": 0.5,
+}
+
+# Model Promotion Thresholds
+MODEL_PROMOTION = {
+    "min_auc": 0.75,
+    "min_f1": 0.65,
+    "min_precision": 0.70,
+}
