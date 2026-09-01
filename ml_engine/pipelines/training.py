@@ -2,6 +2,8 @@
 
 Trains Logistic Regression baseline and candidate models (Random Forest, Gradient Boosting)
 using stratified splits and SMOTE applied strictly on the training fold.
+
+TASK-21: Added ``data_source`` parameter for dataset traceability in the model registry.
 """
 
 from typing import Any
@@ -45,11 +47,22 @@ def build_preprocessor() -> ColumnTransformer:
 
 def train_churn_classification_pipeline(
     processed_data_path: str | None = None,
-    promote_best: bool = True
+    promote_best: bool = True,
+    data_source: str = "synthetic",
 ) -> dict[str, Any]:
     """Execute complete supervised training workflow.
-    
-    Returns report comparing baseline and candidate models.
+
+    Args:
+        processed_data_path: Path to processed Parquet features file.
+            Defaults to ``data/processed/customer_features.parquet``.
+        promote_best: If True, promote the best-performing model to production.
+        data_source: Tag indicating which dataset produced the features.
+            ``"synthetic"`` (default) | ``"kaggle"``.  Stored in model registry
+            metadata for full traceability (TASK-21).
+
+    Returns:
+        Report dict comparing baseline and candidate models, including
+        ``data_source`` for auditability.
     """
     if processed_data_path is None:
         processed_data_path = PROCESSED_DATA_DIR / "customer_features.parquet"
@@ -68,6 +81,7 @@ def train_churn_classification_pipeline(
 
     print(f"Training split shape: {X_train.shape}, Test split shape: {X_test.shape}")
     print(f"Train churn ratio: {y_train.mean():.4f}, Test churn ratio: {y_test.mean():.4f}")
+    print(f"Data source: {data_source}")
 
     models_to_evaluate = {
         "Baseline_LogisticRegression": LogisticRegression(max_iter=1000, random_state=RANDOM_STATE),
@@ -111,7 +125,7 @@ def train_churn_classification_pipeline(
 
     print(f"Best model selected: {best_model_name} with composite score: {best_score:.4f}")
 
-    # Register models
+    # Register models — include data_source for full traceability (TASK-21)
     version_str = f"v{int(pd.Timestamp.now().timestamp())}"
     if promote_best and best_pipeline:
         registry.register_model(
@@ -120,7 +134,11 @@ def train_churn_classification_pipeline(
             version=version_str,
             metrics=eval_results[best_model_name],
             feature_names=feature_cols,
-            hyperparameters={"random_state": RANDOM_STATE, "test_size": TEST_SIZE},
+            hyperparameters={
+                "random_state": RANDOM_STATE, 
+                "test_size": TEST_SIZE,
+                "data_source": data_source,
+            },
             promote=True,
         )
 
@@ -128,6 +146,7 @@ def train_churn_classification_pipeline(
         "status": "SUCCESS",
         "best_model_name": best_model_name,
         "promoted_version": version_str,
+        "data_source": data_source,
         "metrics_summary": eval_results,
     }
 
