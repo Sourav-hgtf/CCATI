@@ -1,11 +1,14 @@
-"""Admin Endpoints (TASK 17 - Production User Management & RBAC Administration).
+"""Admin Endpoints (TASK 17 - Production User Management & RBAC Administration, TASK-21 - ML Training).
 
 Provides:
-  - GET /admin/audit-logs: Retrieve security audit logs (Admin only)
-  - GET /admin/users: List all system users with roles and status (Admin only)
-  - POST /admin/users: Create a new system user with password validation (Admin only)
-  - PATCH /admin/users/{id}/role: Update a user's role with admin demotion guard (Admin only)
-  - PATCH /admin/users/{id}/status: Activate/Deactivate user with admin lockout guard (Admin only)
+  - GET  /admin/audit-logs:                   Retrieve security audit logs (Admin only)
+  - GET  /admin/users:                         List all system users with roles and status (Admin only)
+  - POST /admin/users:                         Create a new system user with password validation (Admin only)
+  - PATCH /admin/users/{id}/role:              Update a user's role with admin demotion guard (Admin only)
+  - PATCH /admin/users/{id}/status:            Activate/Deactivate user with admin lockout guard (Admin only)
+  - POST /admin/training/kaggle-ingest:        Ingest Cell2Cell Kaggle CSV into the ML pipeline (Admin only)
+  - POST /admin/training/retrain:              Trigger model retraining with configurable data source (Admin only)
+  - GET  /admin/training/dataset-registry:     List all registered datasets with SHA-256 checksums (Admin only)
 """
 
 import uuid
@@ -250,3 +253,180 @@ def update_user_status(
         created_at=updated.created_at.isoformat() if updated.created_at else None,
         last_login_at=updated.last_login_at.isoformat() if updated.last_login_at else None,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TASK-21: ML Training Administration Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+
+from pathlib import Path
+from pydantic import BaseModel, Field
+
+
+class KaggleIngestRequest(BaseModel):
+    """Request body for the Kaggle CSV ingestion endpoint."""
+    kaggle_csv_path: str = Field(
+        default="data/raw/cell2cell_churn.csv",
+        description="Path to the Cell2Cell Kaggle CSV file (relative to project root or absolute).",
+        examples=["data/raw/cell2cell_churn.csv"],
+    )
+    schedule_type: str = Field(
+        default="on_demand",
+        description="Audit label for this ingestion run.",
+    )
+
+
+class RetrainRequest(BaseModel):
+    """Request body for the model retraining endpoint."""
+    data_source: str = Field(
+        default="synthetic",
+        description="Dataset to train on: 'synthetic' or 'kaggle'.",
+        examples=["synthetic", "kaggle"],
+    )
+    promote_best: bool = Field(
+        default=True,
+        description="Whether to automatically promote the best model to production.",
+    )
+
+
+@router.post("/admin/training/kaggle-ingest", dependencies=[Depends(rate_limit_admin)])
+def trigger_kaggle_ingestion(
+    payload: KaggleIngestRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_roles([ROLE_ADMIN])),
+):
+    """Ingest the Cell2Cell Kaggle CSV through the canonical ML pipeline (Admin only).
+
+    - Validates Cell2Cell schema
+    - Maps columns to canonical feature schema
+    - Runs DQ checks, imputation, and feature engineering
+    - Saves to ``data/processed/kaggle_features.parquet`` and ``customer_features.parquet``
+    - Registers dataset with SHA-256 checksum in ``data/raw/dataset_registry.json``
+    - Persists ingested customers to PostgreSQL
+
+    The raw Kaggle CSV is **never overwritten**.
+    """
+    from ml_engine.pipelines.ingestion import run_batch_ingestion
+
+    csv_path = Path(payload.kaggle_csv_path)
+
+    try:
+        summary = run_batch_ingestion(
+            source="kaggle",
+            raw_kaggle_path=csv_path,
+            db_path=None,  # Use PostgreSQL in production
+            schedule_type=payload.schedule_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Kaggle ingestion failed: {exc}",
+        )
+
+    log_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="KAGGLE_INGEST",
+        target_resource=f"file:{payload.kaggle_csv_path}",
+        details=(
+            f"Ingested {summary.get('rows_ingested', 0):,} rows from "
+            f"'{payload.kaggle_csv_path}'. Status: {summary.get('status')}"
+        ),
+        request_id=request.headers.get("X-Request-ID"),
+        event_type="ML_DATA_INGESTION",
+        status="SUCCESS",
+    )
+
+    return {
+        "message": "Kaggle dataset ingested successfully.",
+        "summary": summary,
+    }
+
+
+@router.post("/admin/training/retrain", dependencies=[Depends(rate_limit_admin)])
+def trigger_model_retrain(
+    payload: RetrainRequest,
+    request: Request,
+    current_user: UserContext = Depends(require_roles([ROLE_ADMIN])),
+):
+    """Trigger a full ML retraining run using the specified data source (Admin only).
+
+    Trains Logistic Regression (baseline), Random Forest, and Gradient Boosting
+    candidates using stratified splits and SMOTE on the training fold.
+    The best model (by composite Recall + PR-AUC score) is optionally promoted
+    to production in the model registry.
+
+    The ``data_source`` tag is stored in the model registry metadata for full
+    traceability of which dataset produced each model version.
+    """
+    if payload.data_source not in ("synthetic", "kaggle"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid data_source '{payload.data_source}'. Must be 'synthetic' or 'kaggle'.",
+        )
+
+    from ml_engine.pipelines.training import train_churn_classification_pipeline
+
+    try:
+        result = train_churn_classification_pipeline(
+            promote_best=payload.promote_best,
+            data_source=payload.data_source,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Training data not found: {exc}. "
+                "Run kaggle-ingest first if using data_source='kaggle'."
+            ),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Model retraining failed: {exc}",
+        )
+
+    log_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="MODEL_RETRAIN",
+        target_resource=f"model:{result.get('best_model_name')}:{result.get('promoted_version')}",
+        details=(
+            f"Retrained on data_source='{payload.data_source}'. "
+            f"Best model: {result.get('best_model_name')} "
+            f"promoted as {result.get('promoted_version')}."
+        ),
+        request_id=request.headers.get("X-Request-ID"),
+        event_type="MODEL_RETRAIN",
+        status="SUCCESS",
+    )
+
+    return {
+        "message": "Model retraining completed successfully.",
+        "result": result,
+    }
+
+
+@router.get("/admin/training/dataset-registry", dependencies=[Depends(rate_limit_admin)])
+def get_dataset_registry(
+    current_user: UserContext = Depends(require_roles([ROLE_ADMIN])),
+):
+    """List all registered datasets with provenance and SHA-256 checksums (Admin only).
+
+    Returns the full content of ``data/raw/dataset_registry.json`` so admins
+    can audit which datasets were used to train each model version.
+    """
+    from ml_engine.pipelines.dataset_registry import DatasetRegistry
+
+    registry = DatasetRegistry()
+    datasets = registry.list_datasets()
+    return {
+        "total": len(datasets),
+        "datasets": datasets,
+    }
+

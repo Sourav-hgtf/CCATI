@@ -1,0 +1,40 @@
+{
+  "datasets": {
+    "cell2cell_tmps9p87e7b": {
+      "name": "cell2cell_tmps9p87e7b",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmps9p87e7b.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T12:18:26.857564+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmps9p87e7b.csv"
+    },
+    "synthetic_latest": {
+      "name": "synthetic_latest",
+      "source": "synthetic",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/pytest-of-souravranjansamal/pytest-2/test_ticket_101_ingestion_malf0/raw_test.csv",
+      "sha256": "d5864442114e6fbee8c4b3f331e6a989509568080b8f4e8306f502fa4b73db8f",
+      "row_count": 1,
+      "registered_at": "2026-09-01T12:19:59.785870+00:00",
+      "notes": "Auto-generated synthetic telecom dataset"
+    },
+    "cell2cell_tmpzqci2fqf": {
+      "name": "cell2cell_tmpzqci2fqf",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmpzqci2fqf.csv",
+      "sha256": "cf289753d16ddf3b5acbd419678f6905a50f8a1b82b0774e75181b4d1477bc56",
+      "row_count": 200,
+      "registered_at": "2026-09-01T12:19:10.431959+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmpzqci2fqf.csv"
+    },
+    "cell2cell_tmp_59l2u1a": {
+      "name": "cell2cell_tmp_59l2u1a",
+      "source": "kaggle",
+      "path": "/private/var/folders/rk/hmwcksgn2wgfgmwh94xn78600000gn/T/tmp_59l2u1a.csv",
+      "sha256": "90fba01627cdb7f81f826b224f74df10c2e17a46e377a93c52d267e4c14bc6fd",
+      "row_count": 500,
+      "registered_at": "2026-09-01T12:19:11.034661+00:00",
+      "notes": "Cell2Cell Kaggle dataset. Raw file: tmp_59l2u1a.csv"
+    }
+  }
+}
