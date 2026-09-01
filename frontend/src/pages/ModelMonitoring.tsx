@@ -577,7 +577,7 @@ export const ModelMonitoring: React.FC<ModelMonitoringProps> = ({ currentRole })
               </p>
             ))}
             <div className="text-[11px] text-gray-500 pt-2 border-t border-[#272B36] flex items-center justify-between">
-              <span>Audited Database: <strong className="font-mono text-gray-300">telecom_churn.db</strong></span>
+              <span>Audited Database: <strong className="font-mono text-gray-300">telecom_churn (PostgreSQL)</strong></span>
               <span>{new Date(qualityData.timestamp).toLocaleString()}</span>
             </div>
           </div>

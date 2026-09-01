@@ -139,21 +139,33 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
         }
         scored_records.append(record)
 
-    # Step 8: Persist Scored Records & Profiles to Database
-    df_scored = pd.DataFrame(scored_records)
-    conn = sqlite3.connect(settings.DB_PATH)
-    df_scored.to_sql("customer_scores", conn, if_exists="replace", index=False)
+    # Step 8: Persist Scored Records & Profiles to Database via SQLAlchemy
+    from backend.app.db.session import SessionLocal
+    from backend.app.db.models.customer import CustomerScore
+    from backend.app.db.models.segment import SegmentProfile
 
-    df_profiles = pd.DataFrame(cluster_profiles)
-    df_profiles.to_sql("segment_profiles", conn, if_exists="replace", index=False)
-    conn.close()
+    session = SessionLocal()
+    try:
+        session.query(CustomerScore).delete()
+        for r in scored_records:
+            session.add(CustomerScore(**r))
+        session.query(SegmentProfile).delete()
+        for p in cluster_profiles:
+            session.add(SegmentProfile(**p))
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to persist scored records to PostgreSQL: {e}")
+        raise
+    finally:
+        session.close()
 
     end_time = datetime.now(timezone.utc)
     execution_sec = (end_time - start_time).total_seconds()
 
     return {
         "status": "SUCCEEDED",
-        "records_processed": len(df_scored),
+        "records_processed": len(scored_records),
         "model_version": model_info["version"],
         "clustering_metrics": quality_metrics,
         "execution_seconds": round(execution_sec, 2),

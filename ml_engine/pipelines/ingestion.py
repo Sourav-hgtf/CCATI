@@ -57,16 +57,37 @@ def run_batch_ingestion(
     with open(dq_report_path, "w") as f:
         json.dump(quality_report, f, indent=2)
 
-    # 5. Ingest into SQLite/PostgreSQL Database
-    DATABASE_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    df_features.to_sql("customers", conn, if_exists="replace", index=False)
-    
-    if raw_call_logs_path and raw_call_logs_path.exists():
-        df_logs = pd.read_csv(raw_call_logs_path)
-        df_logs.to_sql("call_logs", conn, if_exists="replace", index=False)
-    
-    conn.close()
+    # 5. Ingest into Database (SQLite for isolated unit tests, PostgreSQL for production)
+    if db_path is not None and str(db_path).endswith(".db"):
+        conn = sqlite3.connect(db_path)
+        df_features.to_sql("customers", conn, if_exists="replace", index=False)
+        if raw_call_logs_path and raw_call_logs_path.exists():
+            df_logs = pd.read_csv(raw_call_logs_path)
+            df_logs.to_sql("call_logs", conn, if_exists="replace", index=False)
+        conn.close()
+    else:
+        from backend.app.db.session import SessionLocal
+        from backend.app.db.models.customer import Customer, CallLog
+
+        session = SessionLocal()
+        try:
+            session.query(Customer).delete()
+            cust_records = df_features.to_dict(orient="records")
+            for r in cust_records:
+                session.add(Customer(**r))
+
+            if raw_call_logs_path and raw_call_logs_path.exists():
+                df_logs = pd.read_csv(raw_call_logs_path)
+                session.query(CallLog).delete()
+                log_records = df_logs.to_dict(orient="records")
+                for lr in log_records:
+                    session.add(CallLog(**lr))
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error persisting ingested data to PostgreSQL: {e}")
+        finally:
+            session.close()
 
     summary = {
         "status": "SUCCESS",

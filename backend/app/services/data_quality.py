@@ -295,13 +295,18 @@ class DataQualityEngine:
 
     def audit_database_quality(self) -> dict[str, Any]:
         """Audit data quality of all customer records in the database."""
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        from backend.app.db.session import SessionLocal
+        from backend.app.db.models.customer import Customer
 
-        cursor.execute("SELECT * FROM customers")
-        rows = [dict(r) for r in cursor.fetchall()]
-        conn.close()
+        session = SessionLocal()
+        try:
+            cust_models = session.query(Customer).all()
+            rows = [
+                {col.name: getattr(c, col.name) for col in Customer.__table__.columns}
+                for c in cust_models
+            ]
+        finally:
+            session.close()
 
         total_records = len(rows)
         if total_records == 0:

@@ -29,22 +29,24 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent.parent
     DATA_DIR: Path = BASE_DIR / "data"
     
-    # Database Settings
-    DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/telecom_churn"
+    # Database Settings (TASK 20 Production PostgreSQL)
+    DATABASE_URL: str = "postgresql+psycopg:///telecom_churn"
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
     
-    # Fallback to local SQLite for local dev when PostgreSQL is not running
-    USE_SQLITE_FALLBACK: bool = True
+    # Path to legacy/source SQLite database for data migration and verification
     DB_PATH: Path = DATA_DIR / "database" / "telecom_churn.db"
     
     @property
     def get_database_url(self) -> str:
-        if self.USE_SQLITE_FALLBACK or self.DATABASE_URL.startswith("sqlite"):
-            return f"sqlite:///{self.DB_PATH}"
-        return self.DATABASE_URL
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg://", 1)
+        elif url.startswith("postgresql://") and not (url.startswith("postgresql+") or url.startswith("postgresql:")):
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
 
     # ── Rate Limiting & Abuse Protection (TASK 19) ───────────────────────────
     RATE_LIMIT_ENABLED: bool = True

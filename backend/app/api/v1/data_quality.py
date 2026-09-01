@@ -3,8 +3,11 @@
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
 from backend.app.core.rate_limiter import rate_limit_read
 from backend.app.core.rbac import UserContext, require_roles
+from backend.app.db.session import get_db
 from backend.app.services.data_quality import DataQualityEngine
 
 router = APIRouter(dependencies=[Depends(rate_limit_read)])
@@ -78,24 +81,25 @@ def validate_customer_data(
 def get_customer_data_quality(
     customer_id: str,
     current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/data-quality/customer/{customer_id} — Check data quality score for a stored subscriber."""
-    import sqlite3
-    from backend.app.core.config import settings
+    from backend.app.db.models.customer import Customer, CustomerScore
+    from sqlalchemy import func
 
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM customers WHERE LOWER(customer_id) = LOWER(?)", (customer_id.strip(),))
-    row = cursor.fetchone()
-    conn.close()
+    cid_clean = customer_id.strip()
+    cust = db.query(Customer).filter(func.lower(Customer.customer_id) == cid_clean.lower()).first()
+    if not cust:
+        cust = db.query(CustomerScore).filter(func.lower(CustomerScore.customer_id) == cid_clean.lower()).first()
 
-    if not row:
+    if not cust:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Customer record '{customer_id}' not found.",
         )
 
+    row_dict = {col.name: getattr(cust, col.name) for col in cust.__table__.columns}
     engine = DataQualityEngine()
-    res = engine.validate_record(dict(row))
+    res = engine.validate_record(row_dict)
     return CustomerValidationResponse(**res)
+

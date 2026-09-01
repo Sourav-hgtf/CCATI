@@ -1,4 +1,4 @@
-"""Audit Logging Module (TICKET-604, TASK 12).
+"""Audit Logging Module (TICKET-604, TASK 12, TASK 20 PostgreSQL).
 
 Records security-sensitive and business-critical actions:
   - PII reveals / data exports
@@ -7,21 +7,16 @@ Records security-sensitive and business-critical actions:
   - Prediction completions and rejections
   - Data-quality gate decisions
   - Drift and performance alert triggers
-
-Table: audit_logs
-Columns added in TASK 12:
-  request_id     – propagated from X-Request-ID correlation header
-  model_version  – active model version at time of event
-  event_type     – structured category (see EVENT_TYPES below)
-  status         – SUCCESS | FAILURE | WARNING | INFO
 """
 
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
-import sqlite3
 from typing import Any
-
+import logging
 from backend.app.core.config import settings
+from backend.app.db.models.audit import AuditLog
+from backend.app.db.session import SessionLocal
+
+logger = logging.getLogger("telecom_churn.audit")
 
 # ── Recognised event types ────────────────────────────────────────────────────
 EVENT_TYPES = {
@@ -63,55 +58,6 @@ EVENT_TYPES = {
     "ADMIN_ACTION",
 }
 
-# ── Internal DB helper ────────────────────────────────────────────────────────
-
-def _get_audit_conn() -> sqlite3.Connection:
-    """Return a connection with the audit_logs table guaranteed to exist."""
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    # Create table with all columns (idempotent)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS audit_logs (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp       TEXT NOT NULL,
-            actor_email     TEXT NOT NULL,
-            actor_role      TEXT NOT NULL,
-            action          TEXT NOT NULL,
-            target_resource TEXT NOT NULL,
-            details         TEXT,
-            request_id      TEXT,
-            model_version   TEXT,
-            event_type      TEXT,
-            status          TEXT DEFAULT 'SUCCESS'
-        )
-    """)
-    # Add new columns to existing databases that predate TASK 12
-    existing_cols = {
-        row[1] for row in conn.execute("PRAGMA table_info(audit_logs)").fetchall()
-    }
-    for col, definition in [
-        ("request_id",    "TEXT"),
-        ("model_version", "TEXT"),
-        ("event_type",    "TEXT"),
-        ("status",        "TEXT DEFAULT 'SUCCESS'"),
-    ]:
-        if col not in existing_cols:
-            conn.execute(f"ALTER TABLE audit_logs ADD COLUMN {col} {definition}")
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_event_type  ON audit_logs(event_type)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_status       ON audit_logs(status)"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_audit_timestamp    ON audit_logs(timestamp)"
-    )
-    conn.commit()
-    return conn
-
-
-# ── Public write API ──────────────────────────────────────────────────────────
 
 def log_audit_event(
     actor_email: str,
@@ -125,54 +71,34 @@ def log_audit_event(
     event_type: str | None = None,
     status: str = "SUCCESS",
 ) -> None:
-    """Write a structured audit log entry.
-
-    Parameters
-    ----------
-    actor_email:      Email of the authenticated user performing the action.
-    actor_role:       Role of that user (Admin, Analyst, …).
-    action:           Free-text action label (preserved for backward compat).
-    target_resource:  The entity being acted on (e.g. "model:v1.0.0").
-    details:          Optional human-readable detail string. Do NOT include PII.
-    request_id:       Correlation ID from the HTTP request.
-    model_version:    Active model version at the time of the event.
-    event_type:       Structured event category from EVENT_TYPES.
-    status:           "SUCCESS" | "FAILURE" | "WARNING" | "INFO".
-    """
+    """Write a structured audit log entry."""
     if not settings.ENABLE_AUDIT_LOGGING:
         return
 
-    # Normalise event_type — fall back to action if not provided
     etype = event_type if event_type in EVENT_TYPES else action
 
-    conn = _get_audit_conn()
+    session = SessionLocal()
     try:
-        conn.execute(
-            """
-            INSERT INTO audit_logs
-                (timestamp, actor_email, actor_role, action, target_resource,
-                 details, request_id, model_version, event_type, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                datetime.now(timezone.utc).isoformat(),
-                actor_email,
-                actor_role,
-                action,
-                target_resource,
-                details,
-                request_id,
-                model_version,
-                etype,
-                status,
-            ),
+        log_entry = AuditLog(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            actor_email=actor_email,
+            actor_role=actor_role,
+            action=action,
+            target_resource=target_resource,
+            details=details,
+            request_id=request_id,
+            model_version=model_version,
+            event_type=etype,
+            status=status,
         )
-        conn.commit()
+        session.add(log_entry)
+        session.commit()
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to write audit log: {e}")
     finally:
-        conn.close()
+        session.close()
 
-
-# ── Public read API ───────────────────────────────────────────────────────────
 
 def get_audit_logs(limit: int = 100) -> list[dict[str, Any]]:
     """Retrieve recent audit logs for the Admin viewer (backward-compatible)."""
@@ -187,95 +113,59 @@ def get_audit_events(
     since_iso: str | None = None,
     until_iso: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Retrieve audit events with optional filters.
-
-    Parameters
-    ----------
-    limit:         Maximum number of records to return.
-    event_type:    Filter by structured event category.
-    status:        Filter by status ("SUCCESS", "FAILURE", …).
-    model_version: Filter by model version string.
-    since_iso:     ISO-8601 lower bound on timestamp (inclusive).
-    until_iso:     ISO-8601 upper bound on timestamp (inclusive).
-    """
-    conn = _get_audit_conn()
+    """Retrieve audit events with optional filters."""
+    session = SessionLocal()
     try:
-        clauses: list[str] = []
-        params: list[Any] = []
+        query = session.query(AuditLog)
 
         if event_type:
-            clauses.append("event_type = ?")
-            params.append(event_type)
+            query = query.filter(AuditLog.event_type == event_type)
         if status:
-            clauses.append("status = ?")
-            params.append(status)
+            query = query.filter(AuditLog.status == status)
         if model_version:
-            clauses.append("model_version = ?")
-            params.append(model_version)
+            query = query.filter(AuditLog.model_version == model_version)
         if since_iso:
-            clauses.append("timestamp >= ?")
-            params.append(since_iso)
+            query = query.filter(AuditLog.timestamp >= since_iso)
         if until_iso:
-            clauses.append("timestamp <= ?")
-            params.append(until_iso)
+            query = query.filter(AuditLog.timestamp <= until_iso)
 
-        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-        params.append(limit)
+        rows = query.order_by(AuditLog.id.desc()).limit(limit).all()
 
-        cursor = conn.execute(
-            f"""
-            SELECT id, timestamp, actor_email, actor_role, action,
-                   target_resource, details, request_id, model_version,
-                   event_type, status
-            FROM audit_logs
-            {where}
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            params,
-        )
-        rows = cursor.fetchall()
+        return [
+            {
+                "id": r.id,
+                "timestamp": r.timestamp,
+                "actor_email": r.actor_email,
+                "actor_role": r.actor_role,
+                "action": r.action,
+                "target_resource": r.target_resource,
+                "details": r.details,
+                "request_id": r.request_id,
+                "model_version": r.model_version,
+                "event_type": r.event_type,
+                "status": r.status,
+            }
+            for r in rows
+        ]
     finally:
-        conn.close()
+        session.close()
 
-    return [
-        {
-            "id":              r["id"],
-            "timestamp":       r["timestamp"],
-            "actor_email":     r["actor_email"],
-            "actor_role":      r["actor_role"],
-            "action":          r["action"],
-            "target_resource": r["target_resource"],
-            "details":         r["details"],
-            "request_id":      r["request_id"],
-            "model_version":   r["model_version"],
-            "event_type":      r["event_type"],
-            "status":          r["status"],
-        }
-        for r in rows
-    ]
-
-
-# ── Retention helper ──────────────────────────────────────────────────────────
 
 def purge_old_audit_events(retention_days: int | None = None) -> int:
-    """Delete audit records older than *retention_days* days.
-
-    Uses ``settings.AUDIT_RETENTION_DAYS`` when *retention_days* is not given.
-    Returns the number of rows deleted.  Does nothing if retention_days == 0.
-    """
+    """Delete audit records older than *retention_days* days."""
     days = retention_days if retention_days is not None else settings.AUDIT_RETENTION_DAYS
     if days <= 0:
         return 0
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    conn = _get_audit_conn()
+    session = SessionLocal()
     try:
-        cursor = conn.execute(
-            "DELETE FROM audit_logs WHERE timestamp < ?", (cutoff,)
-        )
-        conn.commit()
-        deleted = cursor.rowcount
+        deleted = session.query(AuditLog).filter(AuditLog.timestamp < cutoff).delete()
+        session.commit()
+        return deleted
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to purge old audit events: {e}")
+        return 0
     finally:
-        conn.close()
-    return deleted
+        session.close()

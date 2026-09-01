@@ -1,24 +1,24 @@
-"""Backend Analytics & Aggregation Endpoints (TASK 5).
+"""Backend Analytics & Aggregation Endpoints (TASK 5, TASK 20 PostgreSQL).
 
-Aggregates real-time customer churn, risk distribution, revenue-at-risk, and segmentation analytics directly from the production SQLite database.
+Aggregates real-time customer churn, risk distribution, revenue-at-risk, and segmentation analytics directly from PostgreSQL.
 """
 
-import sqlite3
 from fastapi import APIRouter, Depends, Query
-from backend.app.core.config import settings
+from sqlalchemy import case, func
+from sqlalchemy.orm import Session
+
 from backend.app.core.rate_limiter import rate_limit_read
 from backend.app.core.rbac import UserContext, require_roles
+from backend.app.db.models.customer import CustomerScore
+from backend.app.db.session import get_db
 from backend.app.schemas.analytics import (
     ContractBreakdownResponse,
     ChurnTrendPointResponse,
     OverviewMetricsResponse,
     RiskDistributionPointResponse,
-    TenureBreakdownResponse,
 )
-from backend.app.api.v1.scoring import _ensure_scores_seeded
 
 router = APIRouter(dependencies=[Depends(rate_limit_read)])
-
 
 
 @router.get("/analytics/overview", response_model=OverviewMetricsResponse)
@@ -26,18 +26,12 @@ router = APIRouter(dependencies=[Depends(rate_limit_read)])
 def get_analytics_overview(
     range: str = Query("30d"),
     current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/analytics/overview — Aggregated KPI metrics directly from customer_scores database."""
-    _ensure_scores_seeded()
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT COUNT(*) as total FROM customer_scores")
-    total_customers = cursor.fetchone()["total"] or 0
+    total_customers = db.query(func.count(CustomerScore.customer_id)).scalar() or 0
 
     if total_customers == 0:
-        conn.close()
         return OverviewMetricsResponse(
             total_customers=0,
             active_customers=0,
@@ -49,27 +43,29 @@ def get_analytics_overview(
             average_churn_probability=0.0,
         )
 
-    cursor.execute("SELECT COUNT(*) as cnt FROM customer_scores WHERE risk_tier IN ('High', 'Critical')")
-    high_risk_customers = cursor.fetchone()["cnt"] or 0
+    high_risk_customers = db.query(func.count(CustomerScore.customer_id)).filter(
+        CustomerScore.risk_tier.in_(["High", "Critical"])
+    ).scalar() or 0
 
-    cursor.execute("SELECT COUNT(*) as cnt FROM customer_scores WHERE risk_tier = 'Medium'")
-    medium_risk_customers = cursor.fetchone()["cnt"] or 0
+    medium_risk_customers = db.query(func.count(CustomerScore.customer_id)).filter(
+        CustomerScore.risk_tier == "Medium"
+    ).scalar() or 0
 
-    cursor.execute("SELECT COUNT(*) as cnt FROM customer_scores WHERE risk_tier = 'Low'")
-    low_risk_customers = cursor.fetchone()["cnt"] or 0
+    low_risk_customers = db.query(func.count(CustomerScore.customer_id)).filter(
+        CustomerScore.risk_tier == "Low"
+    ).scalar() or 0
 
     active_customers = low_risk_customers + medium_risk_customers
 
-    cursor.execute("SELECT AVG(churn_probability) as avg_prob FROM customer_scores")
-    avg_prob = cursor.fetchone()["avg_prob"] or 0.0
+    avg_prob = db.query(func.avg(CustomerScore.churn_probability)).scalar() or 0.0
 
-    cursor.execute("SELECT SUM(clv) as rev_risk FROM customer_scores WHERE risk_tier IN ('High', 'Critical')")
-    rev_risk = cursor.fetchone()["rev_risk"] or 0.0
+    rev_risk = db.query(func.sum(CustomerScore.clv)).filter(
+        CustomerScore.risk_tier.in_(["High", "Critical"])
+    ).scalar() or 0.0
 
-    cursor.execute("SELECT COUNT(*) as cnt FROM customer_scores WHERE actioned = 1")
-    saved_cnt = cursor.fetchone()["cnt"] or 0
-
-    conn.close()
+    saved_cnt = db.query(func.count(CustomerScore.customer_id)).filter(
+        CustomerScore.actioned == 1
+    ).scalar() or 0
 
     churn_rate_pct = round((high_risk_customers / total_customers) * 100, 1)
 
@@ -97,27 +93,22 @@ def get_analytics_overview(
 @router.get("/analytics/risk-distribution", response_model=list[RiskDistributionPointResponse])
 def get_risk_distribution(
     current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/analytics/distribution — Risk tier distribution aggregated from production model scores."""
-    _ensure_scores_seeded()
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT COUNT(*) as total FROM customer_scores")
-    total = cursor.fetchone()["total"] or 1
+    total = db.query(func.count(CustomerScore.customer_id)).scalar() or 1
 
     tiers = ["Low", "Medium", "High", "Critical"]
     results = []
 
     for tier in tiers:
-        cursor.execute(
-            "SELECT COUNT(*) as cnt, SUM(clv) as rev FROM customer_scores WHERE risk_tier = ?",
-            (tier,),
-        )
-        row = cursor.fetchone()
-        cnt = row["cnt"] or 0
-        rev = row["rev"] or 0.0
+        cnt, rev = db.query(
+            func.count(CustomerScore.customer_id),
+            func.sum(CustomerScore.clv),
+        ).filter(CustomerScore.risk_tier == tier).first()
+        
+        cnt = cnt or 0
+        rev = rev or 0.0
         pct = round((cnt / total) * 100, 1)
 
         results.append(
@@ -129,7 +120,6 @@ def get_risk_distribution(
             )
         )
 
-    conn.close()
     return results
 
 
@@ -137,20 +127,14 @@ def get_risk_distribution(
 def get_churn_trend(
     period: str = Query("monthly"),
     current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/analytics/trend — Monthly churn trend aggregated from database records."""
-    _ensure_scores_seeded()
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    total = db.query(func.count(CustomerScore.customer_id)).scalar() or 1500
 
-    cursor.execute("SELECT COUNT(*) as total FROM customer_scores")
-    total = cursor.fetchone()["total"] or 1500
-
-    cursor.execute("SELECT COUNT(*) as high_cnt FROM customer_scores WHERE risk_tier IN ('High', 'Critical')")
-    high_cnt = cursor.fetchone()["high_cnt"] or 300
-
-    conn.close()
+    high_cnt = db.query(func.count(CustomerScore.customer_id)).filter(
+        CustomerScore.risk_tier.in_(["High", "Critical"])
+    ).scalar() or 300
 
     base_rate = round((high_cnt / total) * 100, 1)
     p_lower = period.lower()
@@ -181,31 +165,22 @@ def get_churn_trend(
 @router.get("/analytics/contracts", response_model=list[ContractBreakdownResponse])
 def get_contract_breakdown(
     current_user: UserContext = Depends(require_roles(["Admin", "Analyst", "RetentionManager", "ModelManager", "Operations", "Viewer"])),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/analytics/contracts — Churn rate aggregated by contract type."""
-    _ensure_scores_seeded()
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT 
-            contract_type,
-            COUNT(*) as total_cnt,
-            SUM(CASE WHEN risk_tier IN ('High', 'Critical') THEN 1 ELSE 0 END) as high_cnt
-        FROM customer_scores
-        GROUP BY contract_type
-        """
-    )
-    rows = cursor.fetchall()
-    conn.close()
+    rows = db.query(
+        CustomerScore.contract_type,
+        func.count(CustomerScore.customer_id).label("total_cnt"),
+        func.sum(
+            case((CustomerScore.risk_tier.in_(["High", "Critical"]), 1), else_=0)
+        ).label("high_cnt"),
+    ).group_by(CustomerScore.contract_type).all()
 
     breakdowns = []
-    for r in rows:
-        contract_name = r["contract_type"] or "Month-to-Month"
-        tot = r["total_cnt"] or 1
-        high_cnt = r["high_cnt"] or 0
+    for contract_name, tot, high_cnt in rows:
+        contract_name = contract_name or "Month-to-Month"
+        tot = tot or 1
+        high_cnt = high_cnt or 0
         rate = round((high_cnt / tot) * 100, 1)
         breakdowns.append(
             ContractBreakdownResponse(

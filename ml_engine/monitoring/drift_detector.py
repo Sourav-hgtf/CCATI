@@ -92,37 +92,10 @@ def calculate_categorical_psi(ref: list[str], curr: list[str]) -> tuple[float, s
 
 
 class DriftDetector:
-    """Production Drift Detection Engine."""
+    """Production Drift Detection Engine (PostgreSQL / SQLAlchemy)."""
 
-    def __init__(self, db_path: str = settings.DB_PATH):
+    def __init__(self, db_path: str | None = None):
         self.db_path = db_path
-
-    def _get_connection(self):
-        conn = sqlite3.connect(self.db_path, timeout=30.0)
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _ensure_history_table(self):
-        """Create monitoring_history table if it does not exist."""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS monitoring_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    monitoring_id TEXT UNIQUE NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    model_name TEXT NOT NULL,
-                    model_version TEXT NOT NULL,
-                    overall_status TEXT NOT NULL,
-                    overall_score REAL NOT NULL,
-                    features_checked INTEGER NOT NULL,
-                    features_drifted INTEGER NOT NULL,
-                    report_json TEXT NOT NULL
-                )
-                """
-            )
-            conn.commit()
 
     def run_drift_analysis(
         self,
@@ -130,15 +103,28 @@ class DriftDetector:
         model_version: str = "v1788203728",
     ) -> dict[str, Any]:
         """Perform statistical feature drift analysis between baseline customer scores and production inference records."""
-        self._ensure_history_table()
+        from backend.app.db.session import SessionLocal
+        from backend.app.db.models.customer import CustomerScore
+        from backend.app.db.models.prediction import PredictionHistory
+        from backend.app.db.models.monitoring import MonitoringHistory
 
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM customer_scores")
-            baseline_rows = [dict(r) for r in cursor.fetchall()]
+        session = SessionLocal()
+        try:
+            scores = session.query(CustomerScore).all()
+            baseline_rows = [
+                {col.name: getattr(s, col.name) for col in CustomerScore.__table__.columns}
+                for s in scores
+            ]
 
-            cursor.execute("SELECT * FROM prediction_history ORDER BY prediction_timestamp DESC LIMIT 500")
-            inference_rows = [dict(r) for r in cursor.fetchall()]
+            preds = session.query(PredictionHistory).order_by(
+                PredictionHistory.prediction_timestamp.desc()
+            ).limit(500).all()
+            inference_rows = [
+                {col.name: getattr(p, col.name) for col in PredictionHistory.__table__.columns}
+                for p in preds
+            ]
+        finally:
+            session.close()
 
         if not baseline_rows or len(baseline_rows) < 5:
             return {
@@ -275,51 +261,54 @@ class DriftDetector:
             "features": feature_reports,
         }
 
-        # Persist to database history log safely with INSERT OR REPLACE
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO monitoring_history 
-                (monitoring_id, timestamp, model_name, model_version, overall_status, overall_score, features_checked, features_drifted, report_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    monitoring_id,
-                    now_str,
-                    model_name,
-                    model_version,
-                    overall_status,
-                    overall_score,
-                    len(feature_reports),
-                    drifted_count,
-                    json.dumps(result),
-                ),
+        # Persist to database history log safely with SQLAlchemy
+        session = SessionLocal()
+        try:
+            hist_entry = MonitoringHistory(
+                monitoring_id=monitoring_id,
+                timestamp=now_str,
+                model_name=model_name,
+                model_version=model_version,
+                overall_status=overall_status,
+                overall_score=overall_score,
+                features_checked=len(feature_reports),
+                features_drifted=drifted_count,
+                report_json=json.dumps(result),
             )
-            conn.commit()
+            session.merge(hist_entry)
+            session.commit()
+        except Exception:
+            session.rollback()
+        finally:
+            session.close()
 
         return result
 
     def get_monitoring_history(self, limit: int = 10) -> list[dict[str, Any]]:
         """Retrieve recent monitoring run records from database history."""
-        self._ensure_history_table()
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM monitoring_history ORDER BY id DESC LIMIT ?", (limit,))
-            rows = cursor.fetchall()
+        from backend.app.db.session import SessionLocal
+        from backend.app.db.models.monitoring import MonitoringHistory
 
-        history = []
-        for r in rows:
-            history.append(
-                {
-                    "monitoring_id": r["monitoring_id"],
-                    "timestamp": r["timestamp"],
-                    "model_name": r["model_name"],
-                    "model_version": r["model_version"],
-                    "overall_status": r["overall_status"],
-                    "overall_score": r["overall_score"],
-                    "features_checked": r["features_checked"],
-                    "features_drifted": r["features_drifted"],
-                }
-            )
-        return history
+        session = SessionLocal()
+        try:
+            records = session.query(MonitoringHistory).order_by(
+                MonitoringHistory.id.desc()
+            ).limit(limit).all()
+
+            history = []
+            for r in records:
+                history.append(
+                    {
+                        "monitoring_id": r.monitoring_id,
+                        "timestamp": r.timestamp,
+                        "model_name": r.model_name,
+                        "model_version": r.model_version,
+                        "overall_status": r.overall_status,
+                        "overall_score": r.overall_score,
+                        "features_checked": r.features_checked,
+                        "features_drifted": r.features_drifted,
+                    }
+                )
+            return history
+        finally:
+            session.close()

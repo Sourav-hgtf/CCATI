@@ -1,17 +1,20 @@
-"""Segment & Behavioral Intelligence Endpoints (TASK 14)."""
+"""Segment & Behavioral Intelligence Endpoints (TASK 14, TASK 20 PostgreSQL)."""
 
 import math
-import sqlite3
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 import numpy as np
 import pandas as pd
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session
 
 from backend.app.core.audit import log_audit_event
-from backend.app.core.config import settings
 from backend.app.core.rate_limiter import rate_limit_read
 from backend.app.core.rbac import UserContext, get_current_user
 from backend.app.core.security import mask_name
+from backend.app.db.models.customer import CustomerScore
+from backend.app.db.models.segment import SegmentProfile as SegmentProfileModel
+from backend.app.db.session import get_db
 from backend.app.schemas.segment import (
     ScatterPoint,
     SegmentCustomerItem,
@@ -32,7 +35,6 @@ from ml_engine.pipelines.clustering import (
 )
 
 router = APIRouter(dependencies=[Depends(rate_limit_read)])
-
 
 
 def _get_macro_insights(profiles: list[dict]) -> SegmentMacroInsights:
@@ -69,42 +71,46 @@ def _get_macro_insights(profiles: list[dict]) -> SegmentMacroInsights:
 @router.get("/segments", response_model=SegmentOverviewResponse)
 def get_segments_overview(
     current_user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/segments (cluster profiles, 2D scatter coordinates, risk matrix, quality metrics)."""
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
     # Load segment profiles
-    cursor.execute("SELECT * FROM segment_profiles ORDER BY cluster_id ASC")
-    profile_rows = cursor.fetchall()
-    profiles = [dict(p) for p in profile_rows]
+    profile_models = db.query(SegmentProfileModel).order_by(SegmentProfileModel.cluster_id.asc()).all()
+    profiles = [
+        {
+            col.name: getattr(p, col.name)
+            for col in SegmentProfileModel.__table__.columns
+        }
+        for p in profile_models
+    ]
 
     # Load 2D scatter plot coordinates
-    cursor.execute("SELECT customer_id, pca_x, pca_y, cluster_id, churn_probability, risk_tier FROM customer_scores LIMIT 600")
-    scatter_rows = cursor.fetchall()
-
-    # Load full dataset slice for risk matrix
-    cursor.execute("SELECT cluster_id, risk_tier FROM customer_scores")
-    all_scores_rows = cursor.fetchall()
-    conn.close()
+    scatter_models = db.query(
+        CustomerScore.customer_id,
+        CustomerScore.pca_x,
+        CustomerScore.pca_y,
+        CustomerScore.cluster_id,
+        CustomerScore.churn_probability,
+        CustomerScore.risk_tier,
+    ).limit(600).all()
 
     points = [
         ScatterPoint(
-            customer_id=r["customer_id"],
-            x=r["pca_x"],
-            y=r["pca_y"],
-            cluster_id=r["cluster_id"],
-            churn_probability=r["churn_probability"],
-            risk_tier=r["risk_tier"],
+            customer_id=r[0],
+            x=r[1],
+            y=r[2],
+            cluster_id=r[3],
+            churn_probability=r[4],
+            risk_tier=r[5],
         )
-        for r in scatter_rows
+        for r in scatter_models
     ]
 
-    # Compute risk matrix
-    df_scores = pd.DataFrame([dict(r) for r in all_scores_rows])
+    # Load full dataset slice for risk matrix
+    all_scores_models = db.query(CustomerScore.cluster_id, CustomerScore.risk_tier).all()
+
+    df_scores = pd.DataFrame([{"cluster_id": r[0], "risk_tier": r[1]} for r in all_scores_models])
     if not df_scores.empty and "cluster_id" in df_scores.columns:
-        # Attach names
         name_map = {p["cluster_id"]: p["cluster_name"] for p in profiles}
         df_scores["cluster_name"] = df_scores["cluster_id"].map(name_map).fillna("Unknown")
         risk_matrix_data = compute_segment_risk_matrix(df_scores)
@@ -124,7 +130,7 @@ def get_segments_overview(
                 davies_bouldin_index=1.3603,
                 calinski_harabasz_index=949.14,
                 n_clusters=len(profiles),
-                evaluated_subscribers=len(all_scores_rows),
+                evaluated_subscribers=len(all_scores_models),
                 interpretation="Evaluated on 1,500 subscriber behavioral features.",
             )
     except Exception:
@@ -133,7 +139,7 @@ def get_segments_overview(
             davies_bouldin_index=1.3603,
             calinski_harabasz_index=949.14,
             n_clusters=len(profiles),
-            evaluated_subscribers=len(all_scores_rows),
+            evaluated_subscribers=len(all_scores_models),
             interpretation="Evaluated on subscriber behavioral features.",
         )
 
@@ -151,19 +157,19 @@ def get_segments_overview(
 @router.get("/segments/summary", response_model=SegmentSummaryResponse)
 def get_segments_summary(
     current_user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/segments/summary (executive macro summary and health benchmarks)."""
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    profile_models = db.query(SegmentProfileModel).order_by(SegmentProfileModel.cluster_id.asc()).all()
+    profiles = [
+        {
+            col.name: getattr(p, col.name)
+            for col in SegmentProfileModel.__table__.columns
+        }
+        for p in profile_models
+    ]
 
-    cursor.execute("SELECT * FROM segment_profiles ORDER BY cluster_id ASC")
-    profile_rows = cursor.fetchall()
-    profiles = [dict(p) for p in profile_rows]
-
-    cursor.execute("SELECT COUNT(*) FROM customer_scores")
-    total_subs = cursor.fetchone()[0]
-    conn.close()
+    total_subs = db.query(func.count(CustomerScore.customer_id)).scalar() or 0
 
     try:
         artifacts = load_segmentation_artifacts()
@@ -197,35 +203,47 @@ def get_segments_summary(
 def get_segment_detail(
     segment_id: int,
     current_user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/segments/{id} (detailed segment profile, feature distributions, ROI projection, risk breakdown)."""
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM segment_profiles WHERE cluster_id = ?", (segment_id,))
-    profile_row = cursor.fetchone()
+    profile_row = db.query(SegmentProfileModel).filter(SegmentProfileModel.cluster_id == segment_id).first()
     if not profile_row:
-        conn.close()
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Segment {segment_id} not found in database.",
         )
 
-    # Fetch actual customer data from segment for real distribution calculations
-    cursor.execute(
-        "SELECT tenure_months, monthly_charges, total_charges, usage_drop_call_pct, usage_drop_data_pct, support_calls_m1, risk_tier, clv FROM customer_scores WHERE cluster_id = ?",
-        (segment_id,),
-    )
-    cust_rows = cursor.fetchall()
-    conn.close()
+    cust_rows = db.query(
+        CustomerScore.tenure_months,
+        CustomerScore.monthly_charges,
+        CustomerScore.total_charges,
+        CustomerScore.usage_drop_call_pct,
+        CustomerScore.usage_drop_data_pct,
+        CustomerScore.support_calls_m1,
+        CustomerScore.risk_tier,
+        CustomerScore.clv,
+    ).filter(CustomerScore.cluster_id == segment_id).all()
 
     count = len(cust_rows)
-    profile_dict = dict(profile_row)
+    profile_dict = {col.name: getattr(profile_row, col.name) for col in SegmentProfileModel.__table__.columns}
     profile = SegmentProfile(**profile_dict)
 
     if count > 0:
-        df_seg = pd.DataFrame([dict(r) for r in cust_rows])
+        df_seg = pd.DataFrame(
+            [
+                {
+                    "tenure_months": r[0],
+                    "monthly_charges": r[1],
+                    "total_charges": r[2],
+                    "usage_drop_call_pct": r[3],
+                    "usage_drop_data_pct": r[4],
+                    "support_calls_m1": r[5],
+                    "risk_tier": r[6],
+                    "clv": r[7],
+                }
+                for r in cust_rows
+            ]
+        )
         feature_distributions = {
             "tenure_months": {
                 "mean": round(float(df_seg["tenure_months"].mean()), 1),
@@ -282,68 +300,52 @@ def get_segment_customers(
     risk_tier: str | None = Query(None, description="Filter by risk tier (Low, Medium, High, Critical)"),
     search: str | None = Query(None, description="Search by Customer ID or Name"),
     current_user: UserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """GET /api/v1/segments/{id}/customers (paginated customer list with filtering)."""
-    conn = sqlite3.connect(settings.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    seg_profile = db.query(SegmentProfileModel).filter(SegmentProfileModel.cluster_id == segment_id).first()
+    cluster_name = seg_profile.cluster_name if seg_profile else f"Segment {segment_id + 1}"
 
-    # Get segment name
-    cursor.execute("SELECT cluster_name FROM segment_profiles WHERE cluster_id = ?", (segment_id,))
-    seg_row = cursor.fetchone()
-    cluster_name = seg_row["cluster_name"] if seg_row else f"Segment {segment_id + 1}"
-
-    # TASK 18: Explicit column list — exclude email and other unnecessary PII columns
-    select_cols = "customer_id, name, plan_tier, contract_type, tenure_months, monthly_charges, churn_probability, risk_tier, priority_score, clv, support_calls_m1, usage_drop_call_pct, cluster_id"
-    query = f"SELECT {select_cols} FROM customer_scores WHERE cluster_id = ?"
-    params: list[Any] = [segment_id]
+    query = db.query(CustomerScore).filter(CustomerScore.cluster_id == segment_id)
 
     if risk_tier:
-        query += " AND LOWER(risk_tier) = LOWER(?)"
-        params.append(risk_tier.strip())
+        query = query.filter(func.lower(CustomerScore.risk_tier) == risk_tier.strip().lower())
 
     if search:
-        query += " AND (LOWER(customer_id) LIKE LOWER(?) OR LOWER(name) LIKE LOWER(?))"
-        pattern = f"%{search.strip()}%"
-        params.extend([pattern, pattern])
+        search_pattern = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                CustomerScore.customer_id.ilike(search_pattern),
+                CustomerScore.name.ilike(search_pattern),
+            )
+        )
 
-    # Count total matching
-    count_query = query.replace(f"SELECT {select_cols}", "SELECT COUNT(*)", 1)
-    cursor.execute(count_query, params)
-    total_matching = cursor.fetchone()[0]
+    total_matching = query.count()
 
-    # Fetch page
-    query += " ORDER BY churn_probability DESC LIMIT ? OFFSET ?"
     offset = (page - 1) * page_size
-    params.extend([page_size, offset])
+    records = query.order_by(CustomerScore.churn_probability.desc()).offset(offset).limit(page_size).all()
 
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-
-    # TASK 18: Mask customer names — PII protection in segment views
     customers = [
         SegmentCustomerItem(
-            customer_id=r["customer_id"],
-            name=mask_name(r["name"]),
-            plan_tier=r["plan_tier"],
-            contract_type=r["contract_type"],
-            tenure_months=r["tenure_months"],
-            monthly_charges=r["monthly_charges"],
-            churn_probability=r["churn_probability"],
-            risk_tier=r["risk_tier"],
-            priority_score=r["priority_score"],
-            clv=r["clv"],
-            support_calls_m1=r["support_calls_m1"],
-            usage_drop_call_pct=r["usage_drop_call_pct"],
-            cluster_id=r["cluster_id"],
+            customer_id=r.customer_id,
+            name=mask_name(r.name),
+            plan_tier=r.plan_tier,
+            contract_type=r.contract_type,
+            tenure_months=r.tenure_months,
+            monthly_charges=r.monthly_charges,
+            churn_probability=r.churn_probability,
+            risk_tier=r.risk_tier,
+            priority_score=r.priority_score,
+            clv=r.clv,
+            support_calls_m1=r.support_calls_m1,
+            usage_drop_call_pct=r.usage_drop_call_pct,
+            cluster_id=r.cluster_id,
         )
-        for r in rows
+        for r in records
     ]
 
     total_pages = math.ceil(total_matching / page_size) if page_size > 0 else 1
 
-    # TASK 18: Audit log for segment customer data access
     log_audit_event(
         actor_email=current_user.email,
         actor_role=current_user.role,
