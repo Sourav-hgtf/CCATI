@@ -4,10 +4,14 @@ Loads raw usage and call logs from source files (CSV/Parquet), runs schema valid
 and data quality checks, safely filters malformed rows, computes feature engineering
 transformations, and saves outputs to Parquet & SQLite/Postgres.
 
-TASK-21: Added ``source`` parameter to support Kaggle (Cell2Cell) datasets in
-addition to the existing synthetic data path.  The synthetic path is completely
-unchanged.  Kaggle data is adapted to the canonical schema via ``kaggle_adapter``
-before being passed through the same DQ / feature-engineering / persistence steps.
+TASK-21: Added ``source`` parameter to support multiple dataset sources:
+  - ``"synthetic"``  : Auto-generated synthetic telecom data (default, unchanged)
+  - ``"kaggle"``     : Cell2Cell Duke/Teradata Kaggle dataset
+  - ``"telco"``      : IBM Watson / blastchar Telco Customer Churn dataset
+                       (kaggle: blastchar/telco-customer-churn)
+
+All non-synthetic paths are adapted to the canonical schema before passing
+through the same DQ / feature-engineering / persistence steps.
 """
 
 from datetime import datetime, timezone
@@ -22,6 +26,7 @@ from ml_engine.pipelines.data_quality import clean_and_impute_missing, validate_
 from ml_engine.pipelines.dataset_registry import DatasetRegistry
 from ml_engine.pipelines.feature_engineering import compute_derived_features
 from ml_engine.pipelines.kaggle_adapter import adapt_cell2cell_to_canonical, validate_cell2cell_schema
+from ml_engine.pipelines.telco_adapter import adapt_telco_to_canonical, validate_telco_schema
 from ml_engine.pipelines.synthetic_data_generator import save_synthetic_data
 
 
@@ -33,6 +38,7 @@ def run_batch_ingestion(
     # ── TASK-21 ──────────────────────────────────────────────────────────────
     source: str = "synthetic",
     raw_kaggle_path: Path | None = None,
+    raw_telco_path: Path | None = None,
 ) -> dict[str, Any]:
     """Execute batch ingestion pipeline (TICKET-101, TASK-21).
 
@@ -42,9 +48,13 @@ def run_batch_ingestion(
         raw_call_logs_path: Path to the raw synthetic call-logs CSV.
         db_path: Target database path (SQLite for tests; None = PostgreSQL prod).
         schedule_type: Label for audit/logging (``"on_demand"`` | ``"scheduled"``).
-        source: Data source tag — ``"synthetic"`` (default) or ``"kaggle"``.
+        source: Data source tag:
+            ``"synthetic"`` (default) | ``"kaggle"`` | ``"telco"``.
         raw_kaggle_path: Path to the Cell2Cell Kaggle CSV.  Required when
             ``source="kaggle"``.  The file is **never overwritten**.
+        raw_telco_path: Path to the IBM Telco CSV.  Required when
+            ``source="telco"``.  Defaults to
+            ``data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv``.
 
     Returns:
         Run-summary dictionary with row counts, output paths, and quality status.
@@ -54,6 +64,14 @@ def run_batch_ingestion(
     if source == "kaggle":
         return _run_kaggle_ingestion(
             raw_kaggle_path=raw_kaggle_path,
+            db_path=db_path,
+            schedule_type=schedule_type,
+        )
+
+    # ── TASK-21: IBM Telco ingestion path ───────────────────────────────────
+    if source == "telco":
+        return _run_telco_ingestion(
+            raw_telco_path=raw_telco_path,
             db_path=db_path,
             schedule_type=schedule_type,
         )
