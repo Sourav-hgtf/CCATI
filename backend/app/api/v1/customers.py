@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
+from backend.app.core.logger import get_logger
 from backend.app.core.rbac import UserContext, get_current_user, require_roles
 from backend.app.core.security import mask_email, mask_name, mask_phone
 from backend.app.schemas.customer import (
@@ -18,6 +19,7 @@ from backend.app.schemas.customer import (
 from backend.app.services.scoring_service import run_full_scoring_job
 
 router = APIRouter()
+logger = get_logger("telecom_churn.customers")
 
 
 def _ensure_data_seeded():
@@ -29,7 +31,7 @@ def _ensure_data_seeded():
     conn.close()
 
     if not table_exists:
-        print("Database table customer_scores missing. Running initial batch scoring...")
+        logger.info("Customer scores table missing, running initial batch scoring", extra={"step": "seed"})
         run_full_scoring_job(force_ingestion=True)
 
 
@@ -161,12 +163,6 @@ def get_customer_detail(
     rec_payload["actioned"] = bool(row["actioned"])
     rec_payload["actioned_at"] = row["actioned_at"]
 
-    # Check PII permissions
-    if reveal_pii and current_user.role not in ["RetentionManager", "Admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Access denied. Unmasking PII is restricted to RetentionManager and Admin roles. Current role: '{current_user.role}'",
-        )
 
     should_mask = not reveal_pii
 

@@ -10,6 +10,7 @@ import sqlite3
 from typing import Any
 import pandas as pd
 from backend.app.core.config import settings
+from backend.app.core.logger import get_logger
 from business_engine.recommendations import get_recommended_action
 from business_engine.risk_scoring import calculate_risk_scores
 from ml_engine.config import PROCESSED_DATA_DIR
@@ -26,6 +27,8 @@ from ml_engine.pipelines.ingestion import run_batch_ingestion
 from ml_engine.pipelines.training import train_churn_classification_pipeline
 from ml_engine.registry.model_registry import ModelRegistry
 
+logger = get_logger("telecom_churn.scoring_service")
+
 
 def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
     """Execute complete end-to-end scoring pipeline."""
@@ -34,19 +37,19 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
     # Step 1: Data Ingestion & Feature Engineering
     parquet_path = PROCESSED_DATA_DIR / "customer_features.parquet"
     if force_ingestion or not parquet_path.exists():
-        print("Running batch ingestion...")
+        logger.info("Starting batch ingestion", extra={"step": "ingestion"})
         run_batch_ingestion()
 
     df = pd.read_parquet(parquet_path)
-    print(f"Loaded {len(df)} customer feature records for scoring.")
+    logger.info("Loaded customer feature records for scoring", extra={"record_count": len(df), "step": "data_load"})
 
     # Step 2: Load or Train Promoted Model
     registry = ModelRegistry()
     try:
         model, model_info = registry.get_model()
-        print(f"Loaded promoted model version: {model_info['version']}")
+        logger.info("Loaded promoted model", extra={"model_version": model_info['version'], "step": "model_load"})
     except ValueError:
-        print("No promoted model found. Training initial model pipeline...")
+        logger.info("No promoted model found, training initial pipeline", extra={"step": "model_train"})
         train_churn_classification_pipeline()
         model, model_info = registry.get_model()
 
@@ -58,11 +61,11 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
     df["churn_probability"] = churn_probs
 
     # Step 4: SHAP Explainability
-    print("Computing SHAP feature attributions...")
+    logger.info("Computing SHAP feature attributions", extra={"step": "shap"})
     shap_results = compute_shap_explanations(model, X_score, top_n=5)
 
     # Step 5: Business Risk Scoring (Computed before profiling so profiles include CLV & Priority Scores)
-    print("Computing Business Risk Scores...")
+    logger.info("Computing business risk scores", extra={"step": "risk_scoring"})
     risk_scores = calculate_risk_scores(
         churn_probabilities=churn_probs,
         monthly_charges=df["monthly_charges"].values,
@@ -73,7 +76,7 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
     df["clv"] = [r["clv"] for r in risk_scores]
 
     # Step 6: K-Means Segmentation & PCA 2D Scatter Coordinates
-    print("Running K-Means customer segmentation across full subscriber base...")
+    logger.info("Running K-Means customer segmentation", extra={"step": "clustering", "subscriber_count": len(df)})
     X_scaled, scaler, _ = prepare_and_scale_features(df)
     cluster_labels, sil_score, kmeans = run_kmeans_clustering(X_scaled, k=4)
     coords_2d, pca = compute_2d_projections(X_scaled)
@@ -94,7 +97,7 @@ def run_full_scoring_job(force_ingestion: bool = True) -> dict[str, Any]:
     df["pca_y"] = coords_2d[:, 1].round(4)
 
     # Step 7: Retention Recommendations & Record Hydration
-    print("Computing Retention Recommendations...")
+    logger.info("Computing retention recommendations", extra={"step": "recommendations"})
     scored_records = []
     for i, row in df.iterrows():
         r_score = risk_scores[i]

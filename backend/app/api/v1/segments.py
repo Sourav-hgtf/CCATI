@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 import numpy as np
 import pandas as pd
 
+from backend.app.core.audit import log_audit_event
 from backend.app.core.config import settings
 from backend.app.core.rbac import UserContext, get_current_user
+from backend.app.core.security import mask_name
 from backend.app.schemas.segment import (
     ScatterPoint,
     SegmentCustomerItem,
@@ -289,7 +291,9 @@ def get_segment_customers(
     seg_row = cursor.fetchone()
     cluster_name = seg_row["cluster_name"] if seg_row else f"Segment {segment_id + 1}"
 
-    query = "SELECT * FROM customer_scores WHERE cluster_id = ?"
+    # TASK 18: Explicit column list — exclude email and other unnecessary PII columns
+    select_cols = "customer_id, name, plan_tier, contract_type, tenure_months, monthly_charges, churn_probability, risk_tier, priority_score, clv, support_calls_m1, usage_drop_call_pct, cluster_id"
+    query = f"SELECT {select_cols} FROM customer_scores WHERE cluster_id = ?"
     params: list[Any] = [segment_id]
 
     if risk_tier:
@@ -302,7 +306,7 @@ def get_segment_customers(
         params.extend([pattern, pattern])
 
     # Count total matching
-    count_query = query.replace("SELECT *", "SELECT COUNT(*)", 1)
+    count_query = query.replace(f"SELECT {select_cols}", "SELECT COUNT(*)", 1)
     cursor.execute(count_query, params)
     total_matching = cursor.fetchone()[0]
 
@@ -315,10 +319,11 @@ def get_segment_customers(
     rows = cursor.fetchall()
     conn.close()
 
+    # TASK 18: Mask customer names — PII protection in segment views
     customers = [
         SegmentCustomerItem(
             customer_id=r["customer_id"],
-            name=r["name"],
+            name=mask_name(r["name"]),
             plan_tier=r["plan_tier"],
             contract_type=r["contract_type"],
             tenure_months=r["tenure_months"],
@@ -335,6 +340,15 @@ def get_segment_customers(
     ]
 
     total_pages = math.ceil(total_matching / page_size) if page_size > 0 else 1
+
+    # TASK 18: Audit log for segment customer data access
+    log_audit_event(
+        actor_email=current_user.email,
+        actor_role=current_user.role,
+        action="SEGMENT_CUSTOMERS_VIEWED",
+        target_resource=f"segment:{segment_id}",
+        details=f"Viewed {len(customers)} customers in segment {cluster_name} (page {page})",
+    )
 
     return SegmentCustomerListResponse(
         cluster_id=segment_id,
