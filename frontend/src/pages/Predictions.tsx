@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { predictCustomerChurn, ChurnPredictionResult } from '../api/predictions';
+import { getCustomers } from '../api/customers';
 import { getCustomerDataQuality } from '../api/monitoring';
 import { StatusBadge } from '../components/common/StatusBadge';
 import {
@@ -35,11 +36,21 @@ import {
 
 export const Predictions: React.FC = () => {
   const navigate = useNavigate();
-  const [selectedCustomerId, setSelectedCustomerId] = useState('CUST-10164');
-  const [activeSearchId, setActiveSearchId] = useState('CUST-10164');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [activeSearchId, setActiveSearchId] = useState('');
   const [result, setResult] = useState<ChurnPredictionResult | null>(null);
 
   const queryClient = useQueryClient();
+
+  const { data: customerData, isLoading: loadingCustomers } = useQuery({
+    queryKey: ['prediction-customer-profiles'],
+    queryFn: () => getCustomers({ page: 1, page_size: 100, sort_by: 'churn_probability', sort_order: 'desc' }),
+    retry: false,
+  });
+
+  const customerProfiles = customerData?.items ?? [];
+  const highRiskProfiles = customerProfiles.slice(0, 3);
+  const lowRiskProfiles = [...customerProfiles].sort((a, b) => a.churn_probability - b.churn_probability).slice(0, 3);
 
   // Task 11 Customer Data Quality Query
   const { data: dqData } = useQuery({
@@ -63,10 +74,14 @@ export const Predictions: React.FC = () => {
     },
   });
 
-  // Run initial prediction on mount
+  // Use a live subscriber from the current database rather than a stale fixture ID.
   useEffect(() => {
-    mutation.mutate(selectedCustomerId);
-  }, []);
+    const firstCustomerId = customerProfiles[0]?.customer_id;
+    if (!firstCustomerId || activeSearchId) return;
+    setSelectedCustomerId(firstCustomerId);
+    setActiveSearchId(firstCustomerId);
+    mutation.mutate(firstCustomerId);
+  }, [customerProfiles, activeSearchId]);
 
   const handlePredict = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -140,7 +155,7 @@ export const Predictions: React.FC = () => {
                 type="text"
                 value={selectedCustomerId}
                 onChange={(e) => setSelectedCustomerId(e.target.value)}
-                placeholder="Enter Customer ID e.g. CUST-10164"
+                placeholder="Enter a subscriber ID"
                 className="w-full bg-[#1A1D24] border border-[#272B36] rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[#F5A623] font-mono transition"
               />
             </div>
@@ -162,32 +177,32 @@ export const Predictions: React.FC = () => {
             <span className="text-gray-400 font-semibold text-[11px]">Quick Profiles:</span>
 
             <span className="text-red-400 font-medium text-[11px] ml-1">High Risk:</span>
-            {['CUST-10164', 'CUST-10628', 'CUST-11267'].map((id) => (
+            {highRiskProfiles.map((profile) => (
               <button
-                key={id}
-                onClick={() => handleSelectQuickCustomer(id)}
+                key={profile.customer_id}
+                onClick={() => handleSelectQuickCustomer(profile.customer_id)}
                 className={`px-2.5 py-1 rounded-md border font-mono text-[11px] transition ${
-                  selectedCustomerId.toUpperCase() === id
+                  selectedCustomerId.toUpperCase() === profile.customer_id.toUpperCase()
                     ? 'bg-red-950/80 border-red-500 text-red-300 font-bold'
                     : 'bg-[#1A1D24] border-[#272B36] text-gray-400 hover:text-white'
                 }`}
               >
-                {id}
+                {profile.customer_id}
               </button>
             ))}
 
             <span className="text-emerald-400 font-medium text-[11px] ml-2">Low Risk:</span>
-            {['CUST-10006', 'CUST-10008', 'CUST-10009'].map((id) => (
+            {lowRiskProfiles.map((profile) => (
               <button
-                key={id}
-                onClick={() => handleSelectQuickCustomer(id)}
+                key={profile.customer_id}
+                onClick={() => handleSelectQuickCustomer(profile.customer_id)}
                 className={`px-2.5 py-1 rounded-md border font-mono text-[11px] transition ${
-                  selectedCustomerId.toUpperCase() === id
+                  selectedCustomerId.toUpperCase() === profile.customer_id.toUpperCase()
                     ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 font-bold'
                     : 'bg-[#1A1D24] border-[#272B36] text-gray-400 hover:text-white'
                 }`}
               >
-                {id}
+                {profile.customer_id}
               </button>
             ))}
           </div>
@@ -218,6 +233,13 @@ export const Predictions: React.FC = () => {
       </div>
 
       {/* Loading State */}
+      {loadingCustomers && (
+        <div className="dark-card p-12 text-center text-gray-400 flex flex-col items-center justify-center space-y-3 border-[#272B36]">
+          <RefreshCw className="w-6 h-6 text-[#F5A623] animate-spin" />
+          <span className="text-xs font-semibold">Loading live subscriber profiles...</span>
+        </div>
+      )}
+
       {mutation.isPending && (
         <div className="dark-card p-12 text-center text-gray-400 flex flex-col items-center justify-center space-y-3 border-[#272B36]">
           <RefreshCw className="w-6 h-6 text-[#F5A623] animate-spin" />
