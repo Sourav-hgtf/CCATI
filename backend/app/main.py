@@ -85,7 +85,18 @@ async def security_and_observability_middleware(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=(), payment=()"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none';"
+
+    if request.url.path.startswith(("/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect")):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "img-src 'self' data: https://fastapi.tiangolo.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none';"
+        )
+    else:
+        response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none';"
 
     # HSTS for production or when enabled
     if settings.ENABLE_HSTS or settings.APP_ENV == "production":
